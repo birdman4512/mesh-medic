@@ -3,12 +3,12 @@
 [![CI](https://github.com/birdman4512/mesh-medic/actions/workflows/ci.yml/badge.svg)](https://github.com/birdman4512/mesh-medic/actions/workflows/ci.yml)
 [![Ansible Lint](https://github.com/birdman4512/mesh-medic/actions/workflows/ansible-lint.yml/badge.svg)](https://github.com/birdman4512/mesh-medic/actions/workflows/ansible-lint.yml)
 
-Offline survival assistant for Raspberry Pi. Receives questions via Meshtastic radio (Heltec V3), retrieves relevant content from ingested PDFs, and answers using a local LLM — no internet required once deployed.
+Offline survival assistant for Raspberry Pi. Receives questions via any Meshtastic radio connected over USB, retrieves relevant content from ingested PDFs, and answers using a local LLM — no internet required once deployed.
 
 ## How it works
 
 ```
-[Meshtastic DM] → [Heltec V3 USB] → [RAG retrieval] → [Ollama LLM] → [Meshtastic reply]
+[Meshtastic DM] → [USB LoRa device] → [RAG retrieval] → [Ollama LLM] → [Meshtastic reply]
 ```
 
 Long answers are automatically split into numbered chunks (`[1/3] …`) to fit Meshtastic's 237-byte packet limit.
@@ -18,7 +18,7 @@ Long answers are automatically split into numbered chunks (`[1/3] …`) to fit M
 ## Hardware requirements
 
 - Raspberry Pi 4 (4 GB RAM minimum) or Pi 5
-- Heltec WiFi LoRa 32 V3 connected via USB
+- Any Meshtastic-compatible device connected via USB (see [Supported devices](#supported-devices))
 - microSD card (16 GB+)
 
 ## Software prerequisites (Pi)
@@ -131,6 +131,31 @@ Re-ingesting a PDF safely replaces its previous chunks.
 
 ---
 
+## Supported devices
+
+Mesh Medic works with **any device running Meshtastic firmware** connected via USB — it communicates at the firmware protocol level, not the hardware level. The only configuration needed is the correct serial port path.
+
+| Device | USB chip | Typical path |
+|---|---|---|
+| Heltec WiFi LoRa 32 V3 | CP2102N | `/dev/ttyUSB0` |
+| Heltec WiFi LoRa 32 V2 | CP2102 | `/dev/ttyUSB0` |
+| LILYGO T-Beam (classic) | CP2104 | `/dev/ttyUSB0` |
+| LILYGO T-Beam S3 | Native USB CDC | `/dev/ttyACM0` |
+| LILYGO T3-S3 | Native USB CDC | `/dev/ttyACM0` |
+| RAK WisBlock (via USB) | CH340 / CP2102 | `/dev/ttyUSB0` |
+
+> **Rule of thumb:** boards with a dedicated USB-UART chip (CP210x, CH340) show up as `/dev/ttyUSB0`; boards that use the ESP32-S3's built-in native USB show up as `/dev/ttyACM0`.
+
+Set the path in `config.yaml`:
+```yaml
+meshtastic:
+  device: /dev/ttyACM0   # adjust to match your board
+```
+
+If unsure, plug in the device and run `dmesg | tail -20` — the kernel will log the exact path.
+
+---
+
 ## Enabling channel messages
 
 By default Mesh Medic only responds to direct messages (DMs). To also respond on a channel:
@@ -146,13 +171,12 @@ meshtastic:
 
 ## Troubleshooting
 
-**Device not found (`/dev/ttyUSB0`)**
+**Device not found**
 ```bash
-# Plug in the Heltec V3 then check what appeared
+# Plug in the device then check what appeared
 dmesg | tail -20
 ls /dev/tty*
-# Common paths: /dev/ttyUSB0, /dev/ttyACM0
-# Update meshtastic.device in config.yaml
+# Update meshtastic.device in config.yaml to match
 ```
 
 **Permission denied on serial port**
@@ -216,7 +240,7 @@ mesh-medic/
 │   ├── utils.py             # Shared helpers (text chunking)
 │   ├── rag_engine.py        # PDF ingestion + ChromaDB vector retrieval
 │   ├── llm_engine.py        # Ollama HTTP client
-│   ├── meshtastic_client.py # Heltec V3 USB interface, DM handler, reply chunking
+│   ├── meshtastic_client.py # Meshtastic USB interface, DM handler, reply chunking
 │   └── main.py              # Entry point
 ├── scripts/
 │   └── ingest_pdf.py        # CLI: add PDFs to knowledge base
