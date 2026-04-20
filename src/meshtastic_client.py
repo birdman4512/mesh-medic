@@ -6,6 +6,8 @@ import meshtastic
 import meshtastic.serial_interface
 from pubsub import pub
 
+from src.utils import chunk_text
+
 logger = logging.getLogger(__name__)
 
 # Type alias: (question, sender_id, is_dm) -> reply string
@@ -89,26 +91,4 @@ class MeshtasticClient:
                 time.sleep(self.resp_cfg.chunk_delay)
 
     def _chunk_text(self, text: str) -> list[str]:
-        max_len = self.resp_cfg.max_chunk_size
-        if len(text) <= max_len:
-            return [text]
-
-        chunks = []
-        while text:
-            if len(text) <= max_len:
-                chunks.append(text)
-                break
-
-            # Prefer sentence boundary, then word boundary, then hard cut
-            split_at = text.rfind(". ", 0, max_len)
-            if split_at != -1:
-                split_at += 1  # keep the period
-            else:
-                split_at = text.rfind(" ", 0, max_len)
-            if split_at <= 0:
-                split_at = max_len
-
-            chunks.append(text[:split_at].strip())
-            text = text[split_at:].strip()
-
-        return chunks
+        return chunk_text(text, self.resp_cfg.max_chunk_size)

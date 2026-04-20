@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import List
 
 import chromadb
+import pdfplumber
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
-import pdfplumber
 
 logger = logging.getLogger(__name__)
 

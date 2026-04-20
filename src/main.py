@@ -4,9 +4,9 @@ import sys
 import time
 
 from src.config import load_config
-from src.rag_engine import RAGEngine
 from src.llm_engine import LLMEngine
 from src.meshtastic_client import MeshtasticClient
+from src.rag_engine import RAGEngine
 
 logging.basicConfig(
     level=logging.INFO,

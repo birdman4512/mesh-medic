@@ -1,9 +1,9 @@
 ---
-- name: reload systemd
-  systemd:
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
     daemon_reload: true
 
-- name: restart mesh-medic
-  systemd:
+- name: Restart mesh-medic service
+  ansible.builtin.systemd:
     name: mesh-medic
     state: restarted

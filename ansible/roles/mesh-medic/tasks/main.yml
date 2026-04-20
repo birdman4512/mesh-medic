@@ -1,6 +1,6 @@
 ---
 - name: Create mesh-medic system user
-  user:
+  ansible.builtin.user:
     name: "{{ mesh_medic_user }}"
     system: true
     shell: /usr/sbin/nologin
@@ -9,7 +9,7 @@
     create_home: false
 
 - name: Create install and data directories
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: "{{ mesh_medic_user }}"
@@ -22,49 +22,52 @@
     - "{{ mesh_medic_data_dir }}/vectordb"
 
 - name: Clone or update mesh-medic repository
-  git:
+  ansible.builtin.git:
     repo: "{{ mesh_medic_repo_url }}"
     dest: "{{ mesh_medic_install_dir }}"
     version: "{{ mesh_medic_version }}"
     force: true
+  become: true
   become_user: "{{ mesh_medic_user }}"
-  notify: restart mesh-medic
+  notify: Restart mesh-medic service
 
 - name: Create Python virtualenv and install dependencies
-  pip:
+  ansible.builtin.pip:
     requirements: "{{ mesh_medic_install_dir }}/requirements.txt"
     virtualenv: "{{ mesh_medic_install_dir }}/venv"
     virtualenv_command: python3 -m venv
+  become: true
   become_user: "{{ mesh_medic_user }}"
-  notify: restart mesh-medic
+  notify: Restart mesh-medic service
 
 - name: Pre-download sentence-transformers embedding model
-  command: >
+  ansible.builtin.command: >
     {{ mesh_medic_install_dir }}/venv/bin/python -c
     "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+  become: true
   become_user: "{{ mesh_medic_user }}"
   changed_when: false
 
 - name: Deploy config file
-  template:
+  ansible.builtin.template:
     src: config.yaml.j2
     dest: "{{ mesh_medic_install_dir }}/config.yaml"
     owner: "{{ mesh_medic_user }}"
     group: "{{ mesh_medic_user }}"
     mode: "0640"
-  notify: restart mesh-medic
+  notify: Restart mesh-medic service
 
 - name: Deploy systemd service unit
-  template:
+  ansible.builtin.template:
     src: mesh-medic.service.j2
     dest: /etc/systemd/system/mesh-medic.service
     mode: "0644"
   notify:
-    - reload systemd
-    - restart mesh-medic
+    - Reload systemd daemon
+    - Restart mesh-medic service
 
 - name: Enable and start mesh-medic service
-  systemd:
+  ansible.builtin.systemd:
     name: mesh-medic
     enabled: true
     state: started
