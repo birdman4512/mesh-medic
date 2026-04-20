@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Vector database (generated from PDFs at runtime)
+data/vectordb/
+
+# PDFs are local — don't commit them
+data/pdfs/
+
+# Ansible inventory with real IPs/credentials
+ansible/inventory.yml
+
+# sentence-transformers cache
+.cache/
