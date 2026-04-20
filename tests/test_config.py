@@ -1,9 +1,8 @@
-import pytest
 import textwrap
-from pathlib import Path
+
+import pytest
 
 from src.config import load_config
-
 
 MINIMAL_CONFIG = textwrap.dedent("""
     meshtastic:
