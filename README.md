@@ -5,6 +5,8 @@
 
 Offline survival assistant for Raspberry Pi. Receives questions via any Meshtastic radio connected over USB, retrieves relevant content from ingested PDFs, and answers using a local LLM — no internet required once deployed.
 
+**Guides:** [Off-grid solar setup](docs/off-grid-setup.md)
+
 ## How it works
 
 ```
