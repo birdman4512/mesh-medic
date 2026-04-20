@@ -1,22 +1,38 @@
 ---
 - name: Check if Ollama is already installed
-  command: which ollama
+  ansible.builtin.command: which ollama
   register: ollama_check
   ignore_errors: true
   changed_when: false
 
+- name: Download Ollama install script
+  ansible.builtin.get_url:
+    url: https://ollama.ai/install.sh
+    dest: /tmp/ollama-install.sh
+    mode: "0755"
+  when: ollama_check.rc != 0
+
 - name: Install Ollama
-  shell: curl -fsSL https://ollama.ai/install.sh | sh
+  ansible.builtin.shell:
+    cmd: /tmp/ollama-install.sh
+    executable: /bin/bash
+  when: ollama_check.rc != 0
+  changed_when: true
+
+- name: Remove Ollama install script
+  ansible.builtin.file:
+    path: /tmp/ollama-install.sh
+    state: absent
   when: ollama_check.rc != 0
 
 - name: Enable and start Ollama service
-  systemd:
+  ansible.builtin.systemd:
     name: ollama
     enabled: true
     state: started
 
 - name: Wait for Ollama API to become ready
-  uri:
+  ansible.builtin.uri:
     url: http://localhost:11434/api/tags
     method: GET
   register: ollama_ready
@@ -25,15 +41,15 @@
   delay: 5
 
 - name: Pull primary model ({{ ollama_model }})
-  command: ollama pull {{ ollama_model }}
+  ansible.builtin.command: ollama pull {{ ollama_model }}
   changed_when: false
 
 - name: Pull llama3.2:3b as alternative model
-  command: ollama pull llama3.2:3b
+  ansible.builtin.command: ollama pull llama3.2:3b
   changed_when: false
   when: ollama_pull_both_models | bool and ollama_model != 'llama3.2:3b'
 
 - name: Pull phi3:mini as alternative model
-  command: ollama pull phi3:mini
+  ansible.builtin.command: ollama pull phi3:mini
   changed_when: false
   when: ollama_pull_both_models | bool and ollama_model != 'phi3:mini'

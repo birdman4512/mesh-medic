@@ -1,11 +1,11 @@
 ---
 - name: Update apt cache
-  apt:
+  ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
 
 - name: Install system dependencies
-  apt:
+  ansible.builtin.apt:
     name:
       - python3
       - python3-pip
@@ -19,7 +19,7 @@
     state: present
 
 - name: Add deploy user to dialout group for USB serial access
-  user:
+  ansible.builtin.user:
     name: "{{ ansible_user }}"
     groups: dialout
     append: true
