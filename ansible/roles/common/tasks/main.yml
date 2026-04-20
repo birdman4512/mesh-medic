@@ -1,0 +1,25 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install system dependencies
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - git
+      - curl
+      - build-essential
+      - libusb-1.0-0-dev
+      - usbutils
+    state: present
+
+- name: Add deploy user to dialout group for USB serial access
+  user:
+    name: "{{ ansible_user }}"
+    groups: dialout
+    append: true

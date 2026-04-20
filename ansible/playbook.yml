@@ -1,0 +1,9 @@
+---
+- name: Deploy Mesh Medic
+  hosts: mesh_medic
+  become: true
+
+  roles:
+    - common
+    - ollama
+    - mesh-medic
