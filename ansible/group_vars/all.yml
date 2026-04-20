@@ -1,0 +1,30 @@
+# Application install location
+mesh_medic_install_dir: /opt/mesh-medic
+mesh_medic_user: mesh-medic
+mesh_medic_data_dir: /opt/mesh-medic/data
+
+# Git repo — update this to your actual repo URL before deploying
+mesh_medic_repo_url: https://github.com/birdman4512/mesh-medic.git
+mesh_medic_version: main
+
+# LLM model
+# Options:
+#   phi3:mini    — faster, 3.8B params, ~2.3 GB
+#   llama3.2:3b  — slightly better quality, 3B params, ~2.0 GB
+ollama_model: phi3:mini
+ollama_pull_both_models: true  # pull both so you can switch via config.yaml without re-running ansible
+
+# Meshtastic
+meshtastic_device: /dev/ttyUSB0   # change to /dev/ttyACM0 if needed
+
+# LLM parameters
+llm_max_tokens: 400
+llm_temperature: 0.7
+
+# RAG parameters
+rag_chunk_size: 512
+rag_top_k: 3
+
+# Response chunking
+response_max_chunk_size: 200
+response_chunk_delay: 2

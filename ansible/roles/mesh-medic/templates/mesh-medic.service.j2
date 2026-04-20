@@ -1,0 +1,18 @@
+[Unit]
+Description=Mesh Medic — Meshtastic LLM Survival Assistant
+After=network.target ollama.service
+Requires=ollama.service
+
+[Service]
+Type=simple
+User={{ mesh_medic_user }}
+WorkingDirectory={{ mesh_medic_install_dir }}
+ExecStart={{ mesh_medic_install_dir }}/venv/bin/python -m src.main
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mesh-medic
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,39 @@
+---
+- name: Check if Ollama is already installed
+  command: which ollama
+  register: ollama_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Install Ollama
+  shell: curl -fsSL https://ollama.ai/install.sh | sh
+  when: ollama_check.rc != 0
+
+- name: Enable and start Ollama service
+  systemd:
+    name: ollama
+    enabled: true
+    state: started
+
+- name: Wait for Ollama API to become ready
+  uri:
+    url: http://localhost:11434/api/tags
+    method: GET
+  register: ollama_ready
+  until: ollama_ready.status == 200
+  retries: 12
+  delay: 5
+
+- name: Pull primary model ({{ ollama_model }})
+  command: ollama pull {{ ollama_model }}
+  changed_when: false
+
+- name: Pull llama3.2:3b as alternative model
+  command: ollama pull llama3.2:3b
+  changed_when: false
+  when: ollama_pull_both_models | bool and ollama_model != 'llama3.2:3b'
+
+- name: Pull phi3:mini as alternative model
+  command: ollama pull phi3:mini
+  changed_when: false
+  when: ollama_pull_both_models | bool and ollama_model != 'phi3:mini'

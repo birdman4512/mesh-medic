@@ -1,0 +1,32 @@
+meshtastic:
+  device: /dev/ttyUSB0        # Heltec V3 — change to /dev/ttyACM0 if ttyUSB0 not found
+  respond_to_channels: false  # true = also answer channel messages (not just DMs)
+  channel_index: 0            # channel index to listen/reply on when respond_to_channels is true
+
+llm:
+  # Options:
+  #   phi3:mini    — 3.8B, ~2.3GB, faster responses, good quality
+  #   llama3.2:3b  — 3B, ~2.0GB, slightly slower, comparable quality
+  model: phi3:mini
+  base_url: http://localhost:11434
+  max_tokens: 400
+  temperature: 0.7
+  system_prompt: |
+    You are a survival expert assistant. Answer questions concisely and practically
+    using the provided reference material. Keep responses under 400 characters when
+    possible due to radio message length constraints. Be direct and actionable.
+    If the answer is not in the provided material, say so and provide brief general guidance.
+
+rag:
+  chunk_size: 512
+  chunk_overlap: 64
+  top_k: 3
+  collection_name: survival_docs
+
+data:
+  pdf_dir: data/pdfs
+  vectordb_dir: data/vectordb
+
+response:
+  max_chunk_size: 200   # Max characters per Meshtastic message packet
+  chunk_delay: 2        # Seconds between multi-part message chunks

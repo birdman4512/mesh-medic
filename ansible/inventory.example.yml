@@ -1,0 +1,7 @@
+all:
+  hosts:
+    mesh_medic:
+      ansible_host: 192.168.1.100   # Change to your Pi's IP address
+      ansible_user: pi
+      # ansible_ssh_private_key_file: ~/.ssh/id_rsa
+      # ansible_become_password: raspberry  # only if sudo requires a password

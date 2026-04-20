@@ -1,0 +1,29 @@
+meshtastic:
+  device: {{ meshtastic_device }}
+  respond_to_channels: false
+  channel_index: 0
+
+llm:
+  model: {{ ollama_model }}
+  base_url: http://localhost:11434
+  max_tokens: {{ llm_max_tokens }}
+  temperature: {{ llm_temperature }}
+  system_prompt: |
+    You are a survival expert assistant. Answer questions concisely and practically
+    using the provided reference material. Keep responses under 400 characters when
+    possible due to radio message length constraints. Be direct and actionable.
+    If the answer is not in the provided material, say so and provide brief general guidance.
+
+rag:
+  chunk_size: {{ rag_chunk_size }}
+  chunk_overlap: 64
+  top_k: {{ rag_top_k }}
+  collection_name: survival_docs
+
+data:
+  pdf_dir: {{ mesh_medic_data_dir }}/pdfs
+  vectordb_dir: {{ mesh_medic_data_dir }}/vectordb
+
+response:
+  max_chunk_size: {{ response_max_chunk_size }}
+  chunk_delay: {{ response_chunk_delay }}
