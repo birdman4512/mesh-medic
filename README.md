@@ -35,6 +35,8 @@ Long answers are automatically split into numbered chunks (`[1/3] …`) to fit M
 
 ```bash
 # 1. Clone and install
+# On Debian/Ubuntu, ensure venv support is available first:
+#   sudo apt install python3-full python3-venv -y
 git clone https://github.com/birdman4512/mesh-medic.git
 cd mesh-medic
 python3 -m venv venv

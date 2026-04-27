@@ -27,9 +27,15 @@
     dest: "{{ mesh_medic_install_dir }}"
     version: "{{ mesh_medic_version }}"
     force: true
-  become: true
-  become_user: "{{ mesh_medic_user }}"
+    accept_hostkey: true
   notify: Restart mesh-medic service
+
+- name: Set ownership of install directory to mesh-medic user
+  ansible.builtin.file:
+    path: "{{ mesh_medic_install_dir }}"
+    owner: "{{ mesh_medic_user }}"
+    group: "{{ mesh_medic_user }}"
+    recurse: true
 
 - name: Create Python virtualenv and install dependencies
   ansible.builtin.pip:
