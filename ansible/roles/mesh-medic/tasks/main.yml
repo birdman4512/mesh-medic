@@ -21,13 +21,34 @@
     - "{{ mesh_medic_data_dir }}/pdfs"
     - "{{ mesh_medic_data_dir }}/vectordb"
 
+- name: Ensure root .ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    mode: "0700"
+
+- name: Fetch GitHub host keys
+  ansible.builtin.command:
+    cmd: ssh-keyscan -H -t rsa,ecdsa,ed25519 github.com
+  register: github_host_keys
+  changed_when: false
+  when: mesh_medic_repo_url is match('git@.*')
+
+- name: Add GitHub host keys to root known_hosts
+  ansible.builtin.blockinfile:
+    path: /root/.ssh/known_hosts
+    block: "{{ github_host_keys.stdout }}"
+    create: true
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED - GitHub host keys"
+  when: mesh_medic_repo_url is match('git@.*')
+
 - name: Clone or update mesh-medic repository
   ansible.builtin.git:
     repo: "{{ mesh_medic_repo_url }}"
     dest: "{{ mesh_medic_install_dir }}"
     version: "{{ mesh_medic_version }}"
     force: true
-    accept_hostkey: true
   notify: Restart mesh-medic service
 
 - name: Set ownership of install directory to mesh-medic user
