@@ -4,6 +4,8 @@ mesh_medic_user: mesh-medic
 mesh_medic_data_dir: /opt/mesh-medic/data
 
 # Git repo — update this to your actual repo URL before deploying
+# SSH (recommended):  git@github.com:birdman4512/mesh-medic.git
+# HTTPS (public repo): https://github.com/birdman4512/mesh-medic.git
 mesh_medic_repo_url: git@github.com:birdman4512/mesh-medic.git
 mesh_medic_version: main
 
