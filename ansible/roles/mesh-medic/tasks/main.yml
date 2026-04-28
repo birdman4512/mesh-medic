@@ -30,11 +30,10 @@
     marker: "# {mark} ANSIBLE MANAGED - GitHub host keys"
   when: mesh_medic_repo_url is match('git@.*')
 
-- name: Mark install directory as safe for git
-  community.general.git_config:
-    name: safe.directory
-    scope: global
-    value: "{{ mesh_medic_install_dir }}"
+- name: Mark install directory as safe for git  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: git config --global --add safe.directory {{ mesh_medic_install_dir }}
+  changed_when: false
 
 - name: Clone or update mesh-medic repository
   ansible.builtin.git:
