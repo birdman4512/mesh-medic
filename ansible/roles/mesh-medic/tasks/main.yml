@@ -31,9 +31,10 @@
   when: mesh_medic_repo_url is match('git@.*')
 
 - name: Mark install directory as safe for git
-  ansible.builtin.command:
-    cmd: git config --global --add safe.directory {{ mesh_medic_install_dir }}
-  changed_when: false
+  community.general.git_config:
+    name: safe.directory
+    scope: global
+    value: "{{ mesh_medic_install_dir }}"
 
 - name: Clone or update mesh-medic repository
   ansible.builtin.git:
@@ -101,7 +102,7 @@
     mode: "0640"
   notify: Restart mesh-medic service
 
-- name: Mark config.yaml as assume-unchanged so git pull never conflicts with it
+- name: Mark config.yaml as assume-unchanged so git pull never conflicts with it  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: git -C {{ mesh_medic_install_dir }} update-index --assume-unchanged config.yaml
   changed_when: false
