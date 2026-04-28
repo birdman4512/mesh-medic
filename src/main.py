@@ -5,6 +5,7 @@ import time
 
 from src.config import load_config
 from src.llm_engine import LLMEngine
+from src.meshcore_client import MeshCoreClient
 from src.meshtastic_client import MeshtasticClient
 from src.rag_engine import RAGEngine
 
@@ -45,7 +46,12 @@ def main():
 
     handler = build_handler(rag, llm)
 
-    client = MeshtasticClient(config, on_message=handler)
+    radio_type = config.radio.type
+    logger.info(f"Radio backend: {radio_type}")
+    if radio_type == "meshcore":
+        client = MeshCoreClient(config, on_message=handler)
+    else:
+        client = MeshtasticClient(config, on_message=handler)
     client.connect()
 
     def shutdown(sig, frame):

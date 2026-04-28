@@ -1,7 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+
+@dataclass
+class RadioConfig:
+    type: str = "meshtastic"  # "meshtastic" or "meshcore"
 
 
 @dataclass
@@ -9,6 +14,16 @@ class MeshtasticConfig:
     device: str
     respond_to_channels: bool
     channel_index: int
+
+
+@dataclass
+class MeshCoreConfig:
+    device: str = "/dev/ttyACM0"
+    respond_to_channels: bool = False
+    channel_index: int = 0
+    room_server: str = ""        # pubkey prefix of room server (empty = disabled)
+    room_password: str = "hello" # password used to log in to the room server
+    room_trigger: str = "?"      # message prefix that directs a question at mesh-medic
 
 
 @dataclass
@@ -42,7 +57,9 @@ class ResponseConfig:
 
 @dataclass
 class Config:
+    radio: RadioConfig
     meshtastic: MeshtasticConfig
+    meshcore: MeshCoreConfig
     llm: LLMConfig
     rag: RAGConfig
     data: DataConfig
@@ -57,8 +74,20 @@ def load_config(path: str = "config.yaml") -> Config:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
 
+    radio_raw = raw.get("radio", {})
+    mc_raw = raw.get("meshcore", {})
+
     return Config(
+        radio=RadioConfig(type=radio_raw.get("type", "meshtastic")),
         meshtastic=MeshtasticConfig(**raw["meshtastic"]),
+        meshcore=MeshCoreConfig(
+            device=mc_raw.get("device", "/dev/ttyACM0"),
+            respond_to_channels=mc_raw.get("respond_to_channels", False),
+            channel_index=mc_raw.get("channel_index", 0),
+            room_server=mc_raw.get("room_server", ""),
+            room_password=mc_raw.get("room_password", "hello"),
+            room_trigger=mc_raw.get("room_trigger", "?"),
+        ),
         llm=LLMConfig(**raw["llm"]),
         rag=RAGConfig(**raw["rag"]),
         data=DataConfig(**raw["data"]),

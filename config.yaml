@@ -1,7 +1,18 @@
+radio:
+  type: meshtastic  # meshtastic | meshcore
+
 meshtastic:
   device: /dev/ttyUSB0        # Heltec V3 — change to /dev/ttyACM0 if ttyUSB0 not found
   respond_to_channels: false  # true = also answer channel messages (not just DMs)
   channel_index: 0            # channel index to listen/reply on when respond_to_channels is true
+
+meshcore:
+  device: /dev/ttyACM0
+  respond_to_channels: false
+  channel_index: 0
+  room_server: ""       # pubkey prefix of a MeshCore room server to join (leave empty to disable)
+  room_password: hello  # password to log in to the room server
+  room_trigger: "?"     # prefix that directs a room message at mesh-medic (e.g. "? how do I...")
 
 llm:
   # Options:
@@ -27,5 +38,5 @@ data:
   vectordb_dir: data/vectordb
 
 response:
-  max_chunk_size: 200   # Max characters per Meshtastic message packet
-  chunk_delay: 10       # Seconds between multi-part message chunks; Meshtastic needs time to route
+  max_chunk_size: 200   # Max chars per packet (MeshCore hard-caps at 160 regardless)
+  chunk_delay: 10       # Seconds between multi-part message chunks

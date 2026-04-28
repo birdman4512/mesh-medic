@@ -1,7 +1,18 @@
+radio:
+  type: {{ radio_type }}
+
 meshtastic:
   device: {{ meshtastic_device }}
   respond_to_channels: false
   channel_index: 0
+
+meshcore:
+  device: {{ meshcore_device }}
+  respond_to_channels: false
+  channel_index: 0
+  room_server: "{{ meshcore_room_server }}"
+  room_password: {{ meshcore_room_password }}
+  room_trigger: "{{ meshcore_room_trigger }}"
 
 llm:
   model: {{ ollama_model }}

@@ -17,8 +17,17 @@ mesh_medic_version: main
 ollama_model: tinyllama:1.1b
 ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 
-# Meshtastic
+# Radio backend — set radio_type to "meshcore" to use MeshCore instead of Meshtastic
+radio_type: meshtastic
 meshtastic_device: /dev/ttyACM0
+meshcore_device: /dev/ttyACM0
+
+# MeshCore room server (optional — leave meshcore_room_server empty to disable)
+# Set meshcore_room_server to the pubkey prefix of the room server node
+# Anyone in the room can then ask a question by prefixing it with meshcore_room_trigger
+meshcore_room_server: ""
+meshcore_room_password: hello
+meshcore_room_trigger: "?"
 
 # LLM parameters
 llm_max_tokens: 50     # 50 tokens ≈ ~190 chars; fits in a single Meshtastic packet
