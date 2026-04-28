@@ -21,7 +21,7 @@ ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 meshtastic_device: /dev/ttyACM0
 
 # LLM parameters
-llm_max_tokens: 80     # 80 tokens ≈ ~320 chars; keeps replies to 1-2 radio packets
+llm_max_tokens: 50     # 50 tokens ≈ ~190 chars; fits in a single Meshtastic packet
 llm_temperature: 0.7
 
 # RAG parameters

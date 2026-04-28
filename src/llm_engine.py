@@ -52,8 +52,9 @@ class LLMEngine:
             return "Error: LLM unavailable. Check Ollama service."
 
     # Max characters to send over radio regardless of model output length.
-    # 350 chars = ~2 Meshtastic packets at 200 chars/packet.
-    _MAX_CHARS = 350
+    # Keep under the single-packet limit (200 chars) so multi-part sends are
+    # never needed — LoRa mesh drops packets 2+ too often to be reliable.
+    _MAX_CHARS = 190
 
     def _clean(self, text: str) -> str:
         """Remove prompt echo artifacts and hard-cap length."""
