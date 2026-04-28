@@ -10,7 +10,7 @@ llm:
   #   llama3.2:3b    — 3B, ~2.0 GB, similar caveat
   model: tinyllama:1.1b
   base_url: http://localhost:11434
-  max_tokens: 80
+  max_tokens: 50
   temperature: 0.7
   system_prompt: |
     You are a survival expert. Answer in 1-2 short sentences only. Maximum 150 characters.
