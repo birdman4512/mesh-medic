@@ -18,6 +18,7 @@
       - libusb-1.0-0-dev
       - usbutils
       - acl
+      - zstd
     state: present
 
 - name: Add deploy user to dialout group for USB serial access

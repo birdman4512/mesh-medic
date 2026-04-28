@@ -8,6 +8,7 @@ Type=simple
 User={{ mesh_medic_user }}
 WorkingDirectory={{ mesh_medic_install_dir }}
 ExecStart={{ mesh_medic_install_dir }}/venv/bin/python -m src.main
+Environment=HF_HOME={{ mesh_medic_data_dir }}/models
 Restart=on-failure
 RestartSec=15
 StandardOutput=journal

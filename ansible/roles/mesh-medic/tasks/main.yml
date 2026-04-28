@@ -8,19 +8,6 @@
     append: true
     create_home: false
 
-- name: Create install and data directories
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ mesh_medic_user }}"
-    group: "{{ mesh_medic_user }}"
-    mode: "0755"
-  loop:
-    - "{{ mesh_medic_install_dir }}"
-    - "{{ mesh_medic_data_dir }}"
-    - "{{ mesh_medic_data_dir }}/pdfs"
-    - "{{ mesh_medic_data_dir }}/vectordb"
-
 - name: Ensure root .ssh directory exists
   ansible.builtin.file:
     path: /root/.ssh
@@ -43,6 +30,11 @@
     marker: "# {mark} ANSIBLE MANAGED - GitHub host keys"
   when: mesh_medic_repo_url is match('git@.*')
 
+- name: Mark install directory as safe for git
+  ansible.builtin.command:
+    cmd: git config --global --add safe.directory {{ mesh_medic_install_dir }}
+  changed_when: false
+
 - name: Clone or update mesh-medic repository
   ansible.builtin.git:
     repo: "{{ mesh_medic_repo_url }}"
@@ -51,12 +43,35 @@
     force: true
   notify: Restart mesh-medic service
 
+- name: Create data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ mesh_medic_user }}"
+    group: "{{ mesh_medic_user }}"
+    mode: "0755"
+  loop:
+    - "{{ mesh_medic_data_dir }}"
+    - "{{ mesh_medic_data_dir }}/pdfs"
+    - "{{ mesh_medic_data_dir }}/vectordb"
+    - "{{ mesh_medic_data_dir }}/models"
+
 - name: Set ownership of install directory to mesh-medic user
   ansible.builtin.file:
     path: "{{ mesh_medic_install_dir }}"
     owner: "{{ mesh_medic_user }}"
     group: "{{ mesh_medic_user }}"
     recurse: true
+
+- name: Install CPU-only PyTorch (avoids pulling large CUDA build on x86_64)
+  ansible.builtin.pip:
+    name: torch
+    extra_args: "--index-url https://download.pytorch.org/whl/cpu"
+    virtualenv: "{{ mesh_medic_install_dir }}/venv"
+    virtualenv_command: python3 -m venv
+  become: true
+  become_user: "{{ mesh_medic_user }}"
+  when: ansible_architecture == "x86_64"
 
 - name: Create Python virtualenv and install dependencies
   ansible.builtin.pip:
@@ -73,6 +88,8 @@
     "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
   become: true
   become_user: "{{ mesh_medic_user }}"
+  environment:
+    HF_HOME: "{{ mesh_medic_data_dir }}/models"
   changed_when: false
 
 - name: Deploy config file
