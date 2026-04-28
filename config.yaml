@@ -28,4 +28,4 @@ data:
 
 response:
   max_chunk_size: 200   # Max characters per Meshtastic message packet
-  chunk_delay: 5        # Seconds between multi-part message chunks; Meshtastic needs time to route
+  chunk_delay: 10       # Seconds between multi-part message chunks; Meshtastic needs time to route

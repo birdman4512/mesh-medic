@@ -30,4 +30,4 @@ rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressur
 
 # Response chunking
 response_max_chunk_size: 200
-response_chunk_delay: 5  # seconds between chunks; Meshtastic needs time to route each packet
+response_chunk_delay: 10  # seconds between chunks; longer delay improves delivery of packet 2+
