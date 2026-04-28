@@ -25,13 +25,30 @@ class MeshtasticClient:
         self.interface: Optional[meshtastic.serial_interface.SerialInterface] = None
         self.my_node_num: Optional[int] = None
 
-    def connect(self):
-        logger.info(f"Connecting to Meshtastic device at {self.mesh_cfg.device}")
-        self.interface = meshtastic.serial_interface.SerialInterface(self.mesh_cfg.device)
-        self.my_node_num = self.interface.myInfo.my_node_num
-        logger.info(f"Connected. Node: !{self.my_node_num:08x}")
-        pub.subscribe(self._on_receive, "meshtastic.receive.text")
-        logger.info("Listening for messages...")
+    def connect(self, retries: int = 10, retry_delay: float = 15.0):
+        for attempt in range(1, retries + 1):
+            try:
+                logger.info(
+                    f"Connecting to Meshtastic device at {self.mesh_cfg.device}"
+                    f" (attempt {attempt}/{retries})"
+                )
+                self.interface = meshtastic.serial_interface.SerialInterface(
+                    self.mesh_cfg.device
+                )
+                self.my_node_num = self.interface.myInfo.my_node_num
+                logger.info(f"Connected. Node: !{self.my_node_num:08x}")
+                pub.subscribe(self._on_receive, "meshtastic.receive.text")
+                logger.info("Listening for messages...")
+                return
+            except Exception as e:
+                logger.warning(f"Connection attempt {attempt} failed: {e}")
+                if attempt < retries:
+                    logger.info(f"Retrying in {retry_delay:.0f}s...")
+                    time.sleep(retry_delay)
+        raise RuntimeError(
+            f"Could not connect to {self.mesh_cfg.device} after {retries} attempts. "
+            "Unplug and replug the USB cable, then restart the service."
+        )
 
     def disconnect(self):
         if self.interface:
