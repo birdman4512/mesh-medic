@@ -101,6 +101,11 @@
     mode: "0640"
   notify: Restart mesh-medic service
 
+- name: Mark config.yaml as assume-unchanged so git pull never conflicts with it
+  ansible.builtin.command:
+    cmd: git -C {{ mesh_medic_install_dir }} update-index --assume-unchanged config.yaml
+  changed_when: false
+
 - name: Deploy systemd service unit
   ansible.builtin.template:
     src: mesh-medic.service.j2
