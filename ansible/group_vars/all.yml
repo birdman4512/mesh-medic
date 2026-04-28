@@ -21,7 +21,7 @@ ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 meshtastic_device: /dev/ttyACM0
 
 # LLM parameters
-llm_max_tokens: 150    # 150 tokens ≈ ~600 chars; enough for a Meshtastic reply
+llm_max_tokens: 80     # 80 tokens ≈ ~320 chars; keeps replies to 1-2 radio packets
 llm_temperature: 0.7
 
 # RAG parameters
@@ -30,4 +30,4 @@ rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressur
 
 # Response chunking
 response_max_chunk_size: 200
-response_chunk_delay: 2
+response_chunk_delay: 5  # seconds between chunks; Meshtastic needs time to route each packet
