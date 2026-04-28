@@ -45,10 +45,44 @@ class LLMEngine:
                 timeout=180,
             )
             resp.raise_for_status()
-            return resp.json()["response"].strip()
+            raw = resp.json()["response"].strip()
+            return self._clean(raw)
         except requests.RequestException as e:
             logger.error(f"LLM request failed: {e}")
             return "Error: LLM unavailable. Check Ollama service."
+
+    # Max characters to send over radio regardless of model output length.
+    # 350 chars = ~2 Meshtastic packets at 200 chars/packet.
+    _MAX_CHARS = 350
+
+    def _clean(self, text: str) -> str:
+        """Remove prompt echo artifacts and hard-cap length."""
+        # TinyLlama sometimes echoes the prompt format back into the response.
+        # If it starts with "Question:" or "Reference material:", the model
+        # repeated the prompt instead of just answering — skip to the answer.
+        for prefix in ("Reference material:", "Question:"):
+            if text.startswith(prefix):
+                # Try to find "Answer:" or just take everything after a blank line
+                for marker in ("Answer:", "\n\n"):
+                    idx = text.find(marker)
+                    if idx != -1:
+                        text = text[idx + len(marker):].strip()
+                        break
+                else:
+                    text = ""
+                break
+
+        # Hard cap at _MAX_CHARS — truncate at last sentence boundary if possible
+        if len(text) > self._MAX_CHARS:
+            truncated = text[: self._MAX_CHARS]
+            last_stop = max(
+                truncated.rfind(". "),
+                truncated.rfind("! "),
+                truncated.rfind("? "),
+            )
+            text = truncated[: last_stop + 1] if last_stop > 50 else truncated
+
+        return text
 
     def _build_prompt(self, question: str, context: str) -> str:
         if context:
