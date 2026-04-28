@@ -3,7 +3,7 @@ import logging
 import threading
 from typing import Callable, Optional
 
-from meshcore import MeshCore, EventType
+from meshcore import EventType, MeshCore
 
 from src.utils import chunk_text
 
