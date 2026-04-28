@@ -44,12 +44,7 @@
   ansible.builtin.command: ollama pull {{ ollama_model }}
   changed_when: false
 
-- name: Pull llama3.2:3b as alternative model
-  ansible.builtin.command: ollama pull llama3.2:3b
-  changed_when: false
-  when: ollama_pull_both_models | bool and ollama_model != 'llama3.2:3b'
-
-- name: Pull phi3:mini as alternative model
+- name: Pull phi3:mini as backup model
   ansible.builtin.command: ollama pull phi3:mini
   changed_when: false
   when: ollama_pull_both_models | bool and ollama_model != 'phi3:mini'

@@ -11,21 +11,22 @@ mesh_medic_version: main
 
 # LLM model
 # Options:
-#   phi3:mini    — faster, 3.8B params, ~2.3 GB
-#   llama3.2:3b  — slightly better quality, 3B params, ~2.0 GB
-ollama_model: phi3:mini
-ollama_pull_both_models: true  # pull both so you can switch via config.yaml without re-running ansible
+#   tinyllama:1.1b — recommended for low-RAM VMs (~638 MB, 1.1B params, fits in 2 GB RAM)
+#   phi3:mini      — 3.8B params, ~2.3 GB — requires 4+ GB RAM, slow on CPU-only
+#   llama3.2:3b    — 3B params, ~2.0 GB — requires 4+ GB RAM, slow on CPU-only
+ollama_model: tinyllama:1.1b
+ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 
 # Meshtastic
-meshtastic_device: /dev/ttyUSB0   # change to /dev/ttyACM0 if needed
+meshtastic_device: /dev/ttyACM0
 
 # LLM parameters
-llm_max_tokens: 400
+llm_max_tokens: 150    # 150 tokens ≈ ~600 chars; enough for a Meshtastic reply
 llm_temperature: 0.7
 
 # RAG parameters
 rag_chunk_size: 512
-rag_top_k: 3
+rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressure
 
 # Response chunking
 response_max_chunk_size: 200

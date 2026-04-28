@@ -5,22 +5,23 @@ meshtastic:
 
 llm:
   # Options:
-  #   phi3:mini    — 3.8B, ~2.3GB, faster responses, good quality
-  #   llama3.2:3b  — 3B, ~2.0GB, slightly slower, comparable quality
-  model: phi3:mini
+  #   tinyllama:1.1b — recommended for low-RAM hosts (~638 MB, fits in 2 GB RAM)
+  #   phi3:mini      — 3.8B, ~2.3 GB, better quality but needs 4+ GB RAM
+  #   llama3.2:3b    — 3B, ~2.0 GB, similar caveat
+  model: tinyllama:1.1b
   base_url: http://localhost:11434
-  max_tokens: 400
+  max_tokens: 150
   temperature: 0.7
   system_prompt: |
     You are a survival expert assistant. Answer questions concisely and practically
-    using the provided reference material. Keep responses under 400 characters when
+    using the provided reference material. Keep responses under 200 characters when
     possible due to radio message length constraints. Be direct and actionable.
     If the answer is not in the provided material, say so and provide brief general guidance.
 
 rag:
   chunk_size: 512
   chunk_overlap: 64
-  top_k: 3
+  top_k: 2
   collection_name: survival_docs
 
 data:

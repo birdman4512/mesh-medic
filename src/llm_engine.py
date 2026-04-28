@@ -34,6 +34,7 @@ class LLMEngine:
             "options": {
                 "temperature": self.cfg.temperature,
                 "num_predict": self.cfg.max_tokens,
+                "num_ctx": 1024,  # cap KV cache to ~1 GB; prevents OOM on low-RAM hosts
             },
         }
 
@@ -41,7 +42,7 @@ class LLMEngine:
             resp = requests.post(
                 f"{self.cfg.base_url}/api/generate",
                 json=payload,
-                timeout=120,
+                timeout=180,
             )
             resp.raise_for_status()
             return resp.json()["response"].strip()
