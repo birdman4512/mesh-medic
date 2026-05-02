@@ -71,6 +71,14 @@ class MeshCoreClient:
 
     def disconnect(self):
         if self._loop and self._loop.is_running():
+            if self._mc is not None:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._mc.disconnect(), self._loop
+                )
+                try:
+                    future.result(timeout=10)
+                except Exception as e:
+                    logger.warning(f"MeshCore disconnect cleanup failed: {e}")
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._thread:
             self._thread.join(timeout=5)
@@ -110,7 +118,8 @@ class MeshCoreClient:
             if self._is_room_sender(sender):
                 await self._handle_room_message(text)
                 return
-            logger.info(f"[DM] {sender}: {text}")
+            logger.info("[DM] Message from %s (%d chars)", sender, len(text))
+            logger.debug("[DM] %s: %r", sender, text)
             loop = asyncio.get_running_loop()
             reply = await loop.run_in_executor(None, self.on_message, text, sender, True)
             if reply:
@@ -131,7 +140,8 @@ class MeshCoreClient:
         if not question:
             return
 
-        logger.info(f"[ROOM] question: {question!r}")
+        logger.info("[ROOM] Question received (%d chars)", len(question))
+        logger.debug("[ROOM] question: %r", question)
         loop = asyncio.get_running_loop()
         reply = await loop.run_in_executor(None, self.on_message, question, "room", False)
         if reply and self._room_pubkey:
@@ -144,7 +154,8 @@ class MeshCoreClient:
             sender = payload.get("pubkey_prefix", "unknown")
             if not text:
                 return
-            logger.info(f"[CH] {sender}: {text}")
+            logger.info("[CH] Message from %s (%d chars)", sender, len(text))
+            logger.debug("[CH] %s: %r", sender, text)
             loop = asyncio.get_running_loop()
             reply = await loop.run_in_executor(None, self.on_message, text, sender, False)
             if reply:
@@ -203,7 +214,7 @@ class MeshCoreClient:
 
     async def _send_chunks(self, text: str, send_fn):
         max_size = min(self.resp_cfg.max_chunk_size, MESHCORE_MAX_CHUNK)
-        parts = chunk_text(text, max_size)
+        parts = chunk_text(text, max_size, max_chunks=self.resp_cfg.max_chunks)
         total = len(parts)
         for i, part in enumerate(parts):
             payload = f"[{i+1}/{total}] {part}" if total > 1 else part

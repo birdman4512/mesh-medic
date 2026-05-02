@@ -53,6 +53,7 @@ class DataConfig:
 class ResponseConfig:
     max_chunk_size: int
     chunk_delay: float
+    max_chunks: int = 5
 
 
 @dataclass
@@ -91,5 +92,9 @@ def load_config(path: str = "config.yaml") -> Config:
         llm=LLMConfig(**raw["llm"]),
         rag=RAGConfig(**raw["rag"]),
         data=DataConfig(**raw["data"]),
-        response=ResponseConfig(**raw["response"]),
+        response=ResponseConfig(
+            max_chunk_size=raw["response"]["max_chunk_size"],
+            chunk_delay=raw["response"]["chunk_delay"],
+            max_chunks=raw["response"].get("max_chunks", 5),
+        ),
     )

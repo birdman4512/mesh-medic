@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 class LLMEngine:
     def __init__(self, config):
         self.cfg = config.llm
+        self.radio_cfg = config.radio
+        self.resp_cfg = config.response
         self._verify_connection()
 
     def _verify_connection(self):
@@ -51,11 +53,6 @@ class LLMEngine:
             logger.error(f"LLM request failed: {e}")
             return "Error: LLM unavailable. Check Ollama service."
 
-    # Max characters to send over radio regardless of model output length.
-    # 195 chars fits in a single 200-char Meshtastic packet — multi-packet
-    # sends are unreliable over LoRa so we guarantee single-packet delivery.
-    _MAX_CHARS = 195
-
     def _clean(self, text: str) -> str:
         """Remove prompt echo artifacts and hard-cap length."""
         # TinyLlama sometimes echoes the prompt format back into the response.
@@ -73,9 +70,9 @@ class LLMEngine:
                     text = ""
                 break
 
-        # Hard cap at _MAX_CHARS — truncate at last sentence boundary if possible
-        if len(text) > self._MAX_CHARS:
-            truncated = text[: self._MAX_CHARS]
+        max_chars = self._max_reply_chars()
+        if len(text) > max_chars:
+            truncated = text[:max_chars]
             last_stop = max(
                 truncated.rfind(". "),
                 truncated.rfind("! "),
@@ -84,6 +81,20 @@ class LLMEngine:
             text = truncated[: last_stop + 1] if last_stop > 50 else truncated
 
         return text
+
+    def _max_reply_chars(self) -> int:
+        per_chunk = self.resp_cfg.max_chunk_size
+        if self.radio_cfg.type == "meshcore":
+            per_chunk = min(per_chunk, 160)
+
+        if self.resp_cfg.max_chunks <= 1:
+            return per_chunk
+
+        prefix_len = len(
+            f"[{self.resp_cfg.max_chunks}/{self.resp_cfg.max_chunks}] "
+        )
+        usable_per_chunk = max(1, per_chunk - prefix_len)
+        return usable_per_chunk * self.resp_cfg.max_chunks
 
     def _build_prompt(self, question: str, context: str) -> str:
         if context:

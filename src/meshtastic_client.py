@@ -76,7 +76,13 @@ class MeshtasticClient:
             if not is_dm and not self.mesh_cfg.respond_to_channels:
                 return
 
-            logger.info(f"[{'DM' if is_dm else 'CH'}] {from_id}: {text}")
+            logger.info(
+                "[%s] Message from %s (%d chars)",
+                "DM" if is_dm else "CH",
+                from_id,
+                len(text),
+            )
+            logger.debug("[%s] %s: %r", "DM" if is_dm else "CH", from_id, text)
 
             reply = self.on_message(text, from_id, is_dm)
             if reply:
@@ -108,4 +114,8 @@ class MeshtasticClient:
                 time.sleep(self.resp_cfg.chunk_delay)
 
     def _chunk_text(self, text: str) -> list[str]:
-        return chunk_text(text, self.resp_cfg.max_chunk_size)
+        return chunk_text(
+            text,
+            self.resp_cfg.max_chunk_size,
+            max_chunks=self.resp_cfg.max_chunks,
+        )

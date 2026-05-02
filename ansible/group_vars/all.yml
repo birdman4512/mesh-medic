@@ -14,6 +14,7 @@ mesh_medic_version: main
 #   tinyllama:1.1b — recommended for low-RAM VMs (~638 MB, 1.1B params, fits in 2 GB RAM)
 #   phi3:mini      — 3.8B params, ~2.3 GB — requires 4+ GB RAM, slow on CPU-only
 #   llama3.2:3b    — 3B params, ~2.0 GB — requires 4+ GB RAM, slow on CPU-only
+ollama_version: "0.21.0"
 ollama_model: tinyllama:1.1b
 ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 
@@ -40,7 +41,7 @@ meshcore_room_password: hello
 meshcore_room_trigger: "?"
 
 # LLM parameters
-llm_max_tokens: 50     # 50 tokens ≈ ~190 chars; fits in a single Meshtastic packet
+llm_max_tokens: 140    # Allows fuller multi-packet replies on MeshCore
 llm_temperature: 0.7
 
 # RAG parameters
@@ -49,4 +50,5 @@ rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressur
 
 # Response chunking
 response_max_chunk_size: 200
-response_chunk_delay: 10  # seconds between chunks; longer delay improves delivery of packet 2+
+response_chunk_delay: 5   # seconds between chunks
+response_max_chunks: 5    # maximum number of reply packets

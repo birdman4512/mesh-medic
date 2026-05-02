@@ -49,3 +49,18 @@ def test_chunk_prefix_format():
     assert len(chunks) == 1
     # Prefix logic lives in MeshtasticClient._send_reply, not chunk_text
     assert "[" not in chunks[0]
+
+
+def test_chunk_limit_caps_number_of_parts():
+    text = " ".join(f"word{i}" for i in range(100))
+    chunks = chunk_text(text, 20, max_chunks=5)
+    assert len(chunks) == 5
+    assert all(len(chunk) <= 20 for chunk in chunks)
+
+
+def test_chunk_limit_reserves_space_for_part_prefixes():
+    text = "a" * 200
+    chunks = chunk_text(text, 20, max_chunks=5)
+    prefix = len("[5/5] ")
+    assert len(chunks) == 5
+    assert all(len(chunk) <= 20 - prefix for chunk in chunks)

@@ -81,6 +81,8 @@ cp ansible/inventory.example.yml ansible/inventory.yml
 ansible-playbook -i ansible/inventory.yml ansible/playbook.yml
 ```
 
+`ansible/inventory.yml` is ignored by git. Keep real credentials there or, better, use SSH keys and/or Ansible Vault.
+
 After deployment, ingest PDFs on the Pi:
 
 ```bash
@@ -294,11 +296,12 @@ meshcore:
 llm:
   model: tinyllama:1.1b
   base_url: http://localhost:11434
-  max_tokens: 50           # 50 tokens ≈ 190 chars; fits in a single packet
+  max_tokens: 140          # allows longer multi-packet replies
   temperature: 0.7
   system_prompt: |
-    You are a survival expert. Answer in 1-2 short sentences only. Maximum 150 characters.
-    No greetings, no filler. Use the reference material. If not relevant, give brief general advice.
+    You are a survival expert. Give clear, practical answers using the reference material when relevant.
+    Prefer 3-6 concise sentences when needed. Keep replies compact for radio delivery, but include useful detail.
+    No greetings or filler. If the reference material is not relevant, give brief general advice.
 
 rag:
   chunk_size: 512
@@ -308,7 +311,8 @@ rag:
 
 response:
   max_chunk_size: 200      # max chars per packet (MeshCore hard-caps at 160 regardless)
-  chunk_delay: 10          # seconds between multi-part message chunks
+  chunk_delay: 5           # seconds between multi-part message chunks
+  max_chunks: 5           # maximum number of reply packets
 ```
 
 ### Ansible group vars
@@ -324,10 +328,12 @@ The key variables in `ansible/group_vars/all.yml`:
 | `meshcore_room_password` | `hello` | Password to log in to the room server |
 | `meshcore_room_trigger` | `?` | Message prefix that triggers a response in the room |
 | `ollama_model` | `tinyllama:1.1b` | LLM model to pull and use |
+| `ollama_version` | `0.21.0` | Pinned Ollama version to install |
 | `ollama_pull_both_models` | `false` | Pull both tinyllama and phi3:mini |
-| `llm_max_tokens` | `50` | Token cap for LLM responses |
+| `llm_max_tokens` | `140` | Token cap for LLM responses |
 | `response_max_chunk_size` | `200` | Max chars per radio packet |
-| `response_chunk_delay` | `10` | Seconds between reply chunks |
+| `response_chunk_delay` | `5` | Seconds between reply chunks |
+| `response_max_chunks` | `5` | Maximum number of reply packets |
 | `rag_chunk_size` | `512` | PDF chunk size for ingestion |
 | `rag_top_k` | `2` | Retrieved passages per question |
 

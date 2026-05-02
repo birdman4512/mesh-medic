@@ -209,10 +209,10 @@ A healthy session looks like:
 ```
 Connected. Node: !ae6145e8
 Listening for messages...
-[DM] !433efbe0: How do I find water?
-Question from !433efbe0: 'How do I find water?'
+[DM] Message from !433efbe0 (21 chars)
+Question from !433efbe0 (21 chars, DM)
 Retrieved 980 chars of context
-Answer (143 chars): Look for green vegetation, follow valleys downhill...
+Answer prepared (143 chars)
 Sent part 1/1 to !433efbe0
 ```
 

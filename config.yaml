@@ -21,11 +21,12 @@ llm:
   #   llama3.2:3b    — 3B, ~2.0 GB, similar caveat
   model: tinyllama:1.1b
   base_url: http://localhost:11434
-  max_tokens: 50
+  max_tokens: 140
   temperature: 0.7
   system_prompt: |
-    You are a survival expert. Answer in 1-2 short sentences only. Maximum 150 characters.
-    No greetings, no filler. Use the reference material. If not relevant, give brief general advice.
+    You are a survival expert. Give clear, practical answers using the reference material when relevant.
+    Prefer 3-6 concise sentences when needed. Keep replies compact for radio delivery, but include useful detail.
+    No greetings or filler. If the reference material is not relevant, give brief general advice.
 
 rag:
   chunk_size: 512
@@ -39,4 +40,5 @@ data:
 
 response:
   max_chunk_size: 200   # Max chars per packet (MeshCore hard-caps at 160 regardless)
-  chunk_delay: 10       # Seconds between multi-part message chunks
+  chunk_delay: 5        # Seconds between multi-part message chunks
+  max_chunks: 5         # Maximum number of reply packets

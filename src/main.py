@@ -18,7 +18,13 @@ logger = logging.getLogger(__name__)
 
 def build_handler(rag: RAGEngine, llm: LLMEngine):
     def handle_message(question: str, sender_id: str, is_dm: bool) -> str:
-        logger.info(f"Question from {sender_id}: {question!r}")
+        logger.info(
+            "Question from %s (%d chars, %s)",
+            sender_id,
+            len(question),
+            "DM" if is_dm else "channel",
+        )
+        logger.debug("Question text from %s: %r", sender_id, question)
 
         context = rag.retrieve(question)
         if context:
@@ -27,7 +33,8 @@ def build_handler(rag: RAGEngine, llm: LLMEngine):
             logger.info("No context found — answering from base model knowledge")
 
         answer = llm.answer(question, context)
-        logger.info(f"Answer ({len(answer)} chars): {answer[:80]}...")
+        logger.info("Answer prepared (%d chars)", len(answer))
+        logger.debug("Answer text: %r", answer)
         return answer
 
     return handle_message

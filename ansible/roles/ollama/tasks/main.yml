@@ -1,29 +1,106 @@
 ---
-- name: Check if Ollama is already installed
-  ansible.builtin.command: which ollama
+- name: Check current Ollama version
+  ansible.builtin.command: ollama -v
   register: ollama_check
   ignore_errors: true
   changed_when: false
 
-- name: Download Ollama install script
-  ansible.builtin.get_url:
-    url: https://ollama.ai/install.sh
-    dest: /tmp/ollama-install.sh
-    mode: "0755"
-  when: ollama_check.rc != 0
+- name: Map Ollama package architecture
+  ansible.builtin.set_fact:
+    ollama_pkg_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(ansible_architecture, '') }}"
 
-- name: Install Ollama
-  ansible.builtin.shell:
-    cmd: /tmp/ollama-install.sh
-    executable: /bin/bash
-  when: ollama_check.rc != 0
+- name: Fail on unsupported Ollama architecture
+  ansible.builtin.fail:
+    msg: "Unsupported architecture for Ollama package install: {{ ansible_architecture }}"
+  when: not ollama_pkg_arch
+
+- name: Download pinned Ollama package
+  ansible.builtin.get_url:
+    url: "https://ollama.com/download/ollama-linux-{{ ollama_pkg_arch }}.tar.zst?version={{ ollama_version }}"
+    dest: "/tmp/ollama-linux-{{ ollama_pkg_arch }}-{{ ollama_version }}.tar.zst"
+    mode: "0644"
+  when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
+
+- name: Remove old Ollama libraries before upgrade
+  ansible.builtin.file:
+    path: /usr/lib/ollama
+    state: absent
+  when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
+
+- name: Ensure Ollama install directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /usr/bin
+    - /usr/lib/ollama
+  when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
+
+- name: Install pinned Ollama package
+  ansible.builtin.command:
+    cmd: >
+      tar --zstd -xpf /tmp/ollama-linux-{{ ollama_pkg_arch }}-{{ ollama_version }}.tar.zst -C /usr
+  when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
   changed_when: true
 
-- name: Remove Ollama install script
+- name: Remove downloaded Ollama package
   ansible.builtin.file:
-    path: /tmp/ollama-install.sh
+    path: "/tmp/ollama-linux-{{ ollama_pkg_arch }}-{{ ollama_version }}.tar.zst"
     state: absent
-  when: ollama_check.rc != 0
+  when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
+
+- name: Create Ollama service user
+  ansible.builtin.user:
+    name: ollama
+    system: true
+    create_home: true
+    home: /usr/share/ollama
+    shell: /usr/sbin/nologin
+
+- name: Check if render group exists
+  ansible.builtin.command: getent group render
+  register: ollama_render_group
+  changed_when: false
+  failed_when: false
+
+- name: Add Ollama user to render group when available
+  ansible.builtin.user:
+    name: ollama
+    groups: render
+    append: true
+  when: ollama_render_group.rc == 0
+
+- name: Check if video group exists
+  ansible.builtin.command: getent group video
+  register: ollama_video_group
+  changed_when: false
+  failed_when: false
+
+- name: Add Ollama user to video group when available
+  ansible.builtin.user:
+    name: ollama
+    groups: video
+    append: true
+  when: ollama_video_group.rc == 0
+
+- name: Add deploy user to ollama group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: ollama
+    append: true
+
+- name: Deploy Ollama systemd unit
+  ansible.builtin.template:
+    src: ollama.service.j2
+    dest: /etc/systemd/system/ollama.service
+    mode: "0644"
+
+- name: Reload systemd daemon for Ollama
+  ansible.builtin.systemd:
+    daemon_reload: true
 
 - name: Enable and start Ollama service
   ansible.builtin.systemd:
