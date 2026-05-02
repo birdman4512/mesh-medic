@@ -156,9 +156,22 @@ class MeshCoreClient:
         result = await self._mc.commands.get_contacts()
         if not result.payload:
             return None
-        for contact in result.payload:
-            cp = getattr(contact, "pubkey_prefix", "")
-            if cp == pubkey_prefix or cp.startswith(pubkey_prefix) or pubkey_prefix.startswith(cp):
+        contacts = result.payload
+        if isinstance(contacts, dict):
+            for public_key, contact in contacts.items():
+                cp = (
+                    contact.get("public_key")
+                    or contact.get("pubkey_prefix")
+                    or public_key
+                    or ""
+                )
+                if cp == pubkey_prefix or cp.startswith(pubkey_prefix):
+                    return contact
+            return None
+
+        for contact in contacts:
+            cp = getattr(contact, "pubkey_prefix", "") or getattr(contact, "public_key", "")
+            if cp == pubkey_prefix or cp.startswith(pubkey_prefix):
                 return contact
         return None
 
