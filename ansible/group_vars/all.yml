@@ -15,7 +15,7 @@ mesh_medic_version: main
 #   phi3:mini      — 3.8B params, ~2.3 GB — requires 4+ GB RAM, slow on CPU-only
 #   llama3.2:3b    — 3B params, ~2.0 GB — requires 4+ GB RAM, slow on CPU-only
 ollama_version: "0.21.0"
-ollama_model: tinyllama:1.1b
+ollama_model: qwen2.5:1.5b-instruct
 ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 
 # Radio backend — set radio_type to "meshcore" to use MeshCore instead of Meshtastic

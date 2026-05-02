@@ -234,7 +234,8 @@ If unsure, plug in the device and run `dmesg | tail -20` — the kernel will log
 
 | Model | Size | Min RAM | Notes |
 |---|---|---|---|
-| `tinyllama:1.1b` | ~638 MB | 2 GB | Default — fits comfortably on Pi 4 4 GB |
+| `tinyllama:1.1b` | ~638 MB | 2 GB | Smallest option, but less reliable |
+| `qwen2.5:1.5b-instruct` | ~986 MB | 2-4 GB | Better instruction following; recommended on Pi 4 |
 | `phi3:mini` | ~2.3 GB | 4 GB | Better quality, noticeably slower on Pi 4 |
 | `llama3.2:3b` | ~2.0 GB | 4 GB | Similar to phi3:mini |
 
@@ -327,7 +328,7 @@ The key variables in `ansible/group_vars/all.yml`:
 | `meshcore_room_server` | `""` | Pubkey prefix of room server to join (empty = disabled) |
 | `meshcore_room_password` | `hello` | Password to log in to the room server |
 | `meshcore_room_trigger` | `?` | Message prefix that triggers a response in the room |
-| `ollama_model` | `tinyllama:1.1b` | LLM model to pull and use |
+| `ollama_model` | `qwen2.5:1.5b-instruct` | LLM model to pull and use |
 | `ollama_version` | `0.21.0` | Pinned Ollama version to install |
 | `ollama_pull_both_models` | `false` | Pull both tinyllama and phi3:mini |
 | `llm_max_tokens` | `220` | Token cap for LLM responses |
