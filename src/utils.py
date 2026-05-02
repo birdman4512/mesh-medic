@@ -1,8 +1,39 @@
 import re
 
 
+def _normalize_marker_only_chunks(chunks: list[str], max_len: int) -> list[str]:
+    normalized: list[str] = []
+
+    i = 0
+    while i < len(chunks):
+        chunk = chunks[i].strip()
+
+        if re.fullmatch(r"\d+\.", chunk) and i + 1 < len(chunks):
+            next_chunk = chunks[i + 1].lstrip()
+            available = max_len - len(chunk) - 1
+            if available > 0:
+                taken = next_chunk[:available]
+                if len(next_chunk) > available:
+                    last_space = taken.rfind(" ")
+                    if last_space > 0:
+                        taken = taken[:last_space]
+                taken = taken.rstrip()
+                if taken:
+                    normalized.append(f"{chunk} {taken}".strip())
+                    remainder = next_chunk[len(taken) :].lstrip()
+                    if remainder:
+                        normalized.append(remainder)
+                    i += 2
+                    continue
+
+        normalized.append(chunk)
+        i += 1
+
+    return normalized
+
+
 def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[str]:
-    """Split text into chunks no longer than max_len, preferring paragraph, line, sentence, then word boundaries."""
+    """Split text into chunks, preferring paragraph, line, sentence, then word boundaries."""
     if not text:
         return []
     if len(text) <= max_len:
@@ -13,52 +44,59 @@ def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[s
         prefix_reserve = len(f"[{max_chunks}/{max_chunks}] ")
     effective_max_len = max(1, max_len - prefix_reserve)
 
-    chunks = []
-    while text:
-        if len(text) <= effective_max_len:
-            chunks.append(text)
+    chunks: list[str] = []
+    remaining = text.strip()
+
+    while remaining:
+        if len(remaining) <= effective_max_len:
+            chunks.append(remaining)
             break
 
-        split_at = text.rfind("\n\n", 0, effective_max_len)
+        split_at = remaining.rfind("\n\n", 0, effective_max_len)
         if split_at != -1:
             split_at += 2
         else:
-            split_at = text.rfind("\n", 0, effective_max_len)
+            split_at = remaining.rfind("\n", 0, effective_max_len)
             if split_at != -1:
                 split_at += 1
-                if re.fullmatch(r"\d+\.", text[:split_at].strip()):
-                    split_at = -1
-            if split_at == -1:
-                split_at = text.rfind(". ", 0, effective_max_len)
+            else:
+                split_at = remaining.rfind(". ", 0, effective_max_len)
                 if split_at != -1:
-                    split_at += 1  # keep the period
-            if split_at == -1:
-                split_at = text.rfind(" ", 0, effective_max_len)
+                    split_at += 1
+                else:
+                    split_at = remaining.rfind(" ", 0, effective_max_len)
+
         if split_at <= 0:
             split_at = effective_max_len
 
         if (
-            0 < split_at < len(text)
-            and text[split_at - 1].isalnum()
-            and text[split_at].isalnum()
+            0 < split_at < len(remaining)
+            and remaining[split_at - 1].isalnum()
+            and remaining[split_at].isalnum()
         ):
             backtrack = split_at
-            while backtrack > 0 and text[backtrack - 1].isalnum():
+            while backtrack > 0 and remaining[backtrack - 1].isalnum():
                 backtrack -= 1
             if backtrack > 0:
                 split_at = backtrack
 
-        chunks.append(text[:split_at].strip())
-        text = text[split_at:].strip()
+        chunk = remaining[:split_at].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[split_at:].strip()
+
+    chunks = _normalize_marker_only_chunks(chunks, effective_max_len)
 
     if max_chunks and len(chunks) > max_chunks:
-        limited = chunks[: max_chunks - 1]
-        remaining_text = " ".join(chunks[max_chunks - 1 :]).strip()
-        tail = (
-            chunk_text(remaining_text, max_len, max_chunks=1)[0]
-            if remaining_text
-            else ""
-        )
-        chunks = limited + [tail]
+        head = chunks[: max_chunks - 1]
+        tail_source = " ".join(chunks[max_chunks - 1 :]).strip()
+        tail = tail_source[:effective_max_len].strip()
+
+        if len(tail_source) > effective_max_len:
+            last_space = tail.rfind(" ")
+            if last_space > 0:
+                tail = tail[:last_space].rstrip()
+
+        chunks = head + ([tail] if tail else [])
 
     return chunks
