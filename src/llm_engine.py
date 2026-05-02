@@ -131,6 +131,16 @@ class LLMEngine:
                 truncated.rfind("? "),
             )
             text = truncated[: last_stop + 1] if last_stop > 50 else truncated
+        else:
+            stripped = text.rstrip()
+            if stripped and stripped[-1] not in ".!?":
+                last_stop = max(
+                    stripped.rfind(". "),
+                    stripped.rfind("! "),
+                    stripped.rfind("? "),
+                )
+                if last_stop > 50:
+                    text = stripped[: last_stop + 1]
 
         return text
 

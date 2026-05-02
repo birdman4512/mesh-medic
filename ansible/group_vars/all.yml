@@ -41,7 +41,7 @@ meshcore_room_password: hello
 meshcore_room_trigger: "?"
 
 # LLM parameters
-llm_max_tokens: 140    # Allows fuller multi-packet replies on MeshCore
+llm_max_tokens: 220    # Gives the model more room to finish replies cleanly
 llm_temperature: 0.7
 
 # RAG parameters

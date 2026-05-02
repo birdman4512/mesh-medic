@@ -296,7 +296,7 @@ meshcore:
 llm:
   model: tinyllama:1.1b
   base_url: http://localhost:11434
-  max_tokens: 140          # allows longer multi-packet replies
+  max_tokens: 220          # gives the model more room to finish replies cleanly
   temperature: 0.7
   system_prompt: |
     You are a survival expert. Give clear, practical answers using the reference material when relevant.
@@ -330,7 +330,7 @@ The key variables in `ansible/group_vars/all.yml`:
 | `ollama_model` | `tinyllama:1.1b` | LLM model to pull and use |
 | `ollama_version` | `0.21.0` | Pinned Ollama version to install |
 | `ollama_pull_both_models` | `false` | Pull both tinyllama and phi3:mini |
-| `llm_max_tokens` | `140` | Token cap for LLM responses |
+| `llm_max_tokens` | `220` | Token cap for LLM responses |
 | `response_max_chunk_size` | `200` | Max chars per radio packet |
 | `response_chunk_delay` | `5` | Seconds between reply chunks |
 | `response_max_chunks` | `15` | Maximum number of reply packets |

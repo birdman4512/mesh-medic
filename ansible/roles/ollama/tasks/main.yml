@@ -40,9 +40,10 @@
   when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
 
 - name: Install pinned Ollama package
-  ansible.builtin.command:
-    cmd: >
-      tar --zstd -xpf /tmp/ollama-linux-{{ ollama_pkg_arch }}-{{ ollama_version }}.tar.zst -C /usr
+  ansible.builtin.unarchive:
+    src: "/tmp/ollama-linux-{{ ollama_pkg_arch }}-{{ ollama_version }}.tar.zst"
+    dest: /usr
+    remote_src: true
   when: ollama_check.rc != 0 or ollama_version not in ollama_check.stdout
   changed_when: true
 
