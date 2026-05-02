@@ -32,6 +32,36 @@ def _normalize_marker_only_chunks(chunks: list[str], max_len: int) -> list[str]:
     return normalized
 
 
+def _normalize_split_words(chunks: list[str], max_len: int) -> list[str]:
+    normalized = chunks[:]
+
+    for i in range(len(normalized) - 1):
+        current = normalized[i].rstrip()
+        nxt = normalized[i + 1].lstrip()
+
+        if not current or not nxt:
+            continue
+        if not (current[-1].isalnum() and nxt[0].isalnum()):
+            continue
+
+        last_space = current.rfind(" ")
+        if last_space <= 0:
+            continue
+
+        trailing = current[last_space + 1 :].strip()
+        if not trailing:
+            continue
+
+        merged_next = f"{trailing}{nxt}"
+        if len(merged_next) > max_len:
+            continue
+
+        normalized[i] = current[:last_space].rstrip()
+        normalized[i + 1] = merged_next
+
+    return [chunk for chunk in normalized if chunk]
+
+
 def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[str]:
     """Split text into chunks, preferring paragraph, line, sentence, then word boundaries."""
     if not text:
@@ -86,6 +116,7 @@ def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[s
         remaining = remaining[split_at:].strip()
 
     chunks = _normalize_marker_only_chunks(chunks, effective_max_len)
+    chunks = _normalize_split_words(chunks, effective_max_len)
 
     if max_chunks and len(chunks) > max_chunks:
         head = chunks[: max_chunks - 1]
