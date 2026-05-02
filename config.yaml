@@ -45,4 +45,4 @@ data:
 response:
   max_chunk_size: 200   # Max chars per packet (MeshCore hard-caps at 160 regardless)
   chunk_delay: 5        # Seconds between multi-part message chunks
-  max_chunks: 10        # Maximum number of reply packets
+  max_chunks: 15        # Maximum number of reply packets
