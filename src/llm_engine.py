@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 class LLMEngine:
     _META_PATTERNS = (
+        r"additional reference material",
+        r"reference material",
+        r"context",
         r"prefer 3-6 concise sentences(?: when needed)?",
         r"keep replies compact for radio delivery(?:,? but include useful detail)?",
         r"give clear, practical answers(?: using the reference material when relevant)?",
@@ -134,7 +137,7 @@ class LLMEngine:
     def _build_prompt(self, question: str, context: str) -> str:
         if context:
             return (
-                f"Reference material:\n{context}\n\n"
+                f"Context:\n{context}\n\n"
                 f"Question: {question}\n\n"
                 "Answer:"
             )

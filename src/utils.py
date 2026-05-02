@@ -37,6 +37,17 @@ def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[s
         if split_at <= 0:
             split_at = effective_max_len
 
+        if (
+            0 < split_at < len(text)
+            and text[split_at - 1].isalnum()
+            and text[split_at].isalnum()
+        ):
+            backtrack = split_at
+            while backtrack > 0 and text[backtrack - 1].isalnum():
+                backtrack -= 1
+            if backtrack > 0:
+                split_at = backtrack
+
         chunks.append(text[:split_at].strip())
         text = text[split_at:].strip()
 
