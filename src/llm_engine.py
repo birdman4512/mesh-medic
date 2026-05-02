@@ -11,6 +11,11 @@ class LLMEngine:
         r"additional reference material",
         r"reference material",
         r"context",
+        r"the following instructions[^.:\n]*",
+        r"instructions?[^.:\n]*radio delivery",
+        r"concise and useful for radio delivery",
+        r"concise an useful for radio delivery",
+        r"useful for radio delivery",
         r"prefer 3-6 concise sentences(?: when needed)?",
         r"keep replies compact for radio delivery(?:,? but include useful detail)?",
         r"give clear, practical answers(?: using the reference material when relevant)?",
@@ -94,6 +99,15 @@ class LLMEngine:
             for pattern in self._META_PATTERNS:
                 text = re.sub(pattern, "", text, flags=re.IGNORECASE)
 
+            # Remove dangling quoted/context-intro fragments that often precede
+            # the real answer in smaller models.
+            text = re.sub(
+                r'^[^A-Za-z0-9]*(?:in\s+the\s+of\s+)?".{0,160}?(?=(?:\d+\s|[A-Z]))',
+                "",
+                text,
+                flags=re.IGNORECASE,
+            )
+            text = re.sub(r"^[^A-Za-z0-9]*(?:in\s+the\s+of\s+)", "", text, flags=re.IGNORECASE)
             text = re.sub(r"\s+", " ", text).strip(" ,.-:\n\t")
             sentences = re.split(r"(?<=[.!?])\s+", text)
             kept = []
