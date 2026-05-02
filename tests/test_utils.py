@@ -64,3 +64,16 @@ def test_chunk_limit_reserves_space_for_part_prefixes():
     prefix = len("[5/5] ")
     assert len(chunks) == 5
     assert all(len(chunk) <= 20 - prefix for chunk in chunks)
+
+
+def test_prefers_newline_boundaries_for_numbered_lists():
+    text = (
+        "To find water, you can do the following:\n\n"
+        "1. Dig a hole in your yard or garden to collect water.\n"
+        "2. Use a plastic sheet or concrete block to line the hole.\n"
+        "3. Check whether your local water table is accessible."
+    )
+    chunks = chunk_text(text, 80, max_chunks=5)
+    assert len(chunks) >= 2
+    assert all(not chunk.endswith("\n2.") for chunk in chunks[:-1])
+    assert any(chunk.startswith("2. ") for chunk in chunks[1:])

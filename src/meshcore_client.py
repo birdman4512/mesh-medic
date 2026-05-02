@@ -73,7 +73,7 @@ class MeshCoreClient:
         if self._loop and self._loop.is_running():
             if self._mc is not None:
                 future = asyncio.run_coroutine_threadsafe(
-                    self._mc.disconnect(), self._loop
+                    self._async_disconnect(), self._loop
                 )
                 try:
                     future.result(timeout=10)
@@ -83,6 +83,26 @@ class MeshCoreClient:
         if self._thread:
             self._thread.join(timeout=5)
         logger.info("Disconnected from MeshCore device.")
+
+    async def _async_disconnect(self):
+        if self._mc is None:
+            return
+
+        await self._mc.disconnect()
+        self._mc = None
+
+        # Let serial_asyncio finish transport shutdown callbacks before we
+        # stop the event loop underneath it.
+        await asyncio.sleep(0.25)
+
+        current = asyncio.current_task()
+        pending = [
+            task
+            for task in asyncio.all_tasks()
+            if task is not current and not task.done()
+        ]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def _join_room(self):
         contact = await self._find_contact(self.mc_cfg.room_server)

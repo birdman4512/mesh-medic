@@ -1,5 +1,5 @@
 def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[str]:
-    """Split text into chunks no longer than max_len, preferring sentence then word boundaries."""
+    """Split text into chunks no longer than max_len, preferring paragraph, line, sentence, then word boundaries."""
     if not text:
         return []
     if len(text) <= max_len:
@@ -16,11 +16,19 @@ def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[s
             chunks.append(text)
             break
 
-        split_at = text.rfind(". ", 0, effective_max_len)
+        split_at = text.rfind("\n\n", 0, effective_max_len)
         if split_at != -1:
-            split_at += 1  # keep the period
+            split_at += 2
         else:
-            split_at = text.rfind(" ", 0, effective_max_len)
+            split_at = text.rfind("\n", 0, effective_max_len)
+            if split_at != -1:
+                split_at += 1
+            else:
+                split_at = text.rfind(". ", 0, effective_max_len)
+                if split_at != -1:
+                    split_at += 1  # keep the period
+                else:
+                    split_at = text.rfind(" ", 0, effective_max_len)
         if split_at <= 0:
             split_at = effective_max_len
 
