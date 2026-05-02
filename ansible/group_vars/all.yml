@@ -51,4 +51,4 @@ rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressur
 # Response chunking
 response_max_chunk_size: 200
 response_chunk_delay: 5   # seconds between chunks
-response_max_chunks: 5    # maximum number of reply packets
+response_max_chunks: 10   # maximum number of reply packets

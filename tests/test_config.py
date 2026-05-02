@@ -30,7 +30,7 @@ MINIMAL_CONFIG = textwrap.dedent("""
     response:
       max_chunk_size: 200
       chunk_delay: 2
-      max_chunks: 5
+      max_chunks: 10
 """)
 
 
@@ -75,14 +75,14 @@ def test_response_config_values(config_file):
     cfg = load_config(config_file)
     assert cfg.response.max_chunk_size == 200
     assert cfg.response.chunk_delay == pytest.approx(2.0)
-    assert cfg.response.max_chunks == 5
+    assert cfg.response.max_chunks == 10
 
 
 def test_response_config_defaults_max_chunks_when_missing(tmp_path):
     path = tmp_path / "config.yaml"
-    path.write_text(MINIMAL_CONFIG.replace("      max_chunks: 5\n", ""))
+    path.write_text(MINIMAL_CONFIG.replace("      max_chunks: 10\n", ""))
     cfg = load_config(str(path))
-    assert cfg.response.max_chunks == 5
+    assert cfg.response.max_chunks == 10
 
 
 def test_missing_config_file_raises():

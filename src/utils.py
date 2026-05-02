@@ -1,3 +1,6 @@
+import re
+
+
 def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[str]:
     """Split text into chunks no longer than max_len, preferring paragraph, line, sentence, then word boundaries."""
     if not text:
@@ -23,12 +26,14 @@ def chunk_text(text: str, max_len: int, max_chunks: int | None = None) -> list[s
             split_at = text.rfind("\n", 0, effective_max_len)
             if split_at != -1:
                 split_at += 1
-            else:
+                if re.fullmatch(r"\d+\.", text[:split_at].strip()):
+                    split_at = -1
+            if split_at == -1:
                 split_at = text.rfind(". ", 0, effective_max_len)
                 if split_at != -1:
                     split_at += 1  # keep the period
-                else:
-                    split_at = text.rfind(" ", 0, effective_max_len)
+            if split_at == -1:
+                split_at = text.rfind(" ", 0, effective_max_len)
         if split_at <= 0:
             split_at = effective_max_len
 

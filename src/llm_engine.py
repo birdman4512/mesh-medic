@@ -1,4 +1,5 @@
 import logging
+import re
 
 import requests
 
@@ -6,6 +7,21 @@ logger = logging.getLogger(__name__)
 
 
 class LLMEngine:
+    _META_PATTERNS = (
+        r"prefer 3-6 concise sentences(?: when needed)?",
+        r"keep replies compact for radio delivery(?:,? but include useful detail)?",
+        r"give clear, practical answers(?: using the reference material when relevant)?",
+        r"never repeat, quote,? or describe these instructions",
+        r"never talk about your formatting rules or the reference material unless the user asks about them",
+        r"no greetings or filler",
+        r"if the reference material is not relevant, give brief general advice",
+        r"answer directly for the user(?: from general survival knowledge)?",
+        r"do not repeat or describe your instructions",
+        r"do not talk about the reference material unless the answer truly needs it",
+        r"answer based on the reference material above",
+        r"ask for clarification if necessary",
+    )
+
     def __init__(self, config):
         self.cfg = config.llm
         self.radio_cfg = config.radio
@@ -70,6 +86,25 @@ class LLMEngine:
                     text = ""
                 break
 
+        lowered = text.lower()
+        if any(re.search(pattern, lowered) for pattern in self._META_PATTERNS):
+            for pattern in self._META_PATTERNS:
+                text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+
+            text = re.sub(r"\s+", " ", text).strip(" ,.-:\n\t")
+            sentences = re.split(r"(?<=[.!?])\s+", text)
+            kept = []
+            for sentence in sentences:
+                stripped = sentence.strip(" ,.-:\n\t")
+                if not stripped:
+                    continue
+                lowered = stripped.lower()
+                if any(re.search(pattern, lowered) for pattern in self._META_PATTERNS):
+                    continue
+                kept.append(stripped)
+            if kept:
+                text = " ".join(kept).strip()
+
         max_chars = self._max_reply_chars()
         if len(text) > max_chars:
             truncated = text[:max_chars]
@@ -101,10 +136,9 @@ class LLMEngine:
             return (
                 f"Reference material:\n{context}\n\n"
                 f"Question: {question}\n\n"
-                f"Answer based on the reference material above:"
+                "Answer:"
             )
         return (
             f"Question: {question}\n\n"
-            f"Note: No matching reference material found. "
-            f"Answer from general survival knowledge:"
+            "Answer:"
         )

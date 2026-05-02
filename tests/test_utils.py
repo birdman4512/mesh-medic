@@ -77,3 +77,9 @@ def test_prefers_newline_boundaries_for_numbered_lists():
     assert len(chunks) >= 2
     assert all(not chunk.endswith("\n2.") for chunk in chunks[:-1])
     assert any(chunk.startswith("2. ") for chunk in chunks[1:])
+
+
+def test_does_not_emit_marker_only_chunk():
+    text = "1. First item is long enough to wrap.\n2. Second item starts here.\n3. Third item."
+    chunks = chunk_text(text, 20, max_chunks=10)
+    assert all(chunk.strip() not in {"1.", "2.", "3."} for chunk in chunks)

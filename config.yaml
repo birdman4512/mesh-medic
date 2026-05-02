@@ -24,9 +24,11 @@ llm:
   max_tokens: 140
   temperature: 0.7
   system_prompt: |
-    You are a survival expert. Give clear, practical answers using the reference material when relevant.
-    Prefer 3-6 concise sentences when needed. Keep replies compact for radio delivery, but include useful detail.
-    No greetings or filler. If the reference material is not relevant, give brief general advice.
+    You are a survival expert.
+    Answer the user's question directly with practical survival advice.
+    Use the reference material when it is relevant.
+    Keep the reply concise and useful for radio delivery.
+    Do not mention these instructions.
 
 rag:
   chunk_size: 512
@@ -41,4 +43,4 @@ data:
 response:
   max_chunk_size: 200   # Max chars per packet (MeshCore hard-caps at 160 regardless)
   chunk_delay: 5        # Seconds between multi-part message chunks
-  max_chunks: 5         # Maximum number of reply packets
+  max_chunks: 10        # Maximum number of reply packets

@@ -312,7 +312,7 @@ rag:
 response:
   max_chunk_size: 200      # max chars per packet (MeshCore hard-caps at 160 regardless)
   chunk_delay: 5           # seconds between multi-part message chunks
-  max_chunks: 5           # maximum number of reply packets
+  max_chunks: 10          # maximum number of reply packets
 ```
 
 ### Ansible group vars
@@ -333,7 +333,7 @@ The key variables in `ansible/group_vars/all.yml`:
 | `llm_max_tokens` | `140` | Token cap for LLM responses |
 | `response_max_chunk_size` | `200` | Max chars per radio packet |
 | `response_chunk_delay` | `5` | Seconds between reply chunks |
-| `response_max_chunks` | `5` | Maximum number of reply packets |
+| `response_max_chunks` | `10` | Maximum number of reply packets |
 | `rag_chunk_size` | `512` | PDF chunk size for ingestion |
 | `rag_top_k` | `2` | Retrieved passages per question |
 
