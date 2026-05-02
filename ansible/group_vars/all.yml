@@ -18,9 +18,19 @@ ollama_model: tinyllama:1.1b
 ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 
 # Radio backend — set radio_type to "meshcore" to use MeshCore instead of Meshtastic
-radio_type: meshtastic
+radio_type: meshcore
 meshtastic_device: /dev/ttyACM0
-meshcore_device: /dev/ttyACM0
+meshcore_device: /dev/ttyUSB0
+
+# MeshCore device identity & radio parameters
+# Regions / frequencies:  AU915 = 915.0,  US915 = 915.0,  EU868 = 868.0,  EU433 = 433.175
+# BW 250 / SF 10 / CR 5 are the MeshCore community defaults
+meshcore_node_name: "Mesh Medic"
+meshcore_freq: 923.125  # MHz
+meshcore_bw: 62.5       # kHz
+meshcore_sf: 8
+meshcore_cr: 6
+# meshcore_repeat not needed — repeater role is set by flashing Repeater firmware
 
 # MeshCore room server (optional — leave meshcore_room_server empty to disable)
 # Set meshcore_room_server to the pubkey prefix of the room server node

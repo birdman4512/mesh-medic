@@ -71,6 +71,8 @@
     virtualenv_command: python3 -m venv
   become: true
   become_user: "{{ mesh_medic_user }}"
+  environment:
+    TMPDIR: /var/tmp
   when: ansible_architecture == "x86_64"
 
 - name: Create Python virtualenv and install dependencies
@@ -80,6 +82,8 @@
     virtualenv_command: python3 -m venv
   become: true
   become_user: "{{ mesh_medic_user }}"
+  environment:
+    TMPDIR: /var/tmp  # /tmp is a small tmpfs; /var/tmp is on the root fs
   notify: Restart mesh-medic service
 
 - name: Pre-download sentence-transformers embedding model
@@ -105,6 +109,27 @@
   ansible.builtin.command:
     cmd: git -C {{ mesh_medic_install_dir }} update-index --assume-unchanged config.yaml
   changed_when: false
+
+- name: Copy device configuration script
+  ansible.builtin.copy:
+    src: configure_device.py
+    dest: /tmp/configure_device.py
+    mode: "0755"
+  when: radio_type == "meshcore"
+
+- name: Configure MeshCore device name and radio frequency
+  ansible.builtin.command:
+    cmd: >
+      {{ mesh_medic_install_dir }}/venv/bin/python /tmp/configure_device.py
+      {{ meshcore_device }}
+      {{ meshcore_node_name | quote }}
+      {{ meshcore_freq }}
+      {{ meshcore_bw }}
+      {{ meshcore_sf }}
+      {{ meshcore_cr }}
+      {{ meshcore_repeat | default('') }}
+  when: radio_type == "meshcore"
+  changed_when: true
 
 - name: Deploy systemd service unit
   ansible.builtin.template:
