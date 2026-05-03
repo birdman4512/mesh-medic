@@ -47,6 +47,8 @@ def _normalize_split_words(chunks: list[str], max_len: int) -> list[str]:
         last_space = current.rfind(" ")
         if last_space <= 0:
             continue
+        if re.fullmatch(r"\d+\.\s+\w+", current):
+            continue
 
         trailing = current[last_space + 1 :].strip()
         if not trailing:
