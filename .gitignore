@@ -15,3 +15,6 @@ ansible/inventory.yml
 
 # sentence-transformers cache
 .cache/
+
+# Claude Code workspace settings
+.claude/
