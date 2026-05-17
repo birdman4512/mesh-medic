@@ -1,4 +1,6 @@
 import logging
+import queue
+import threading
 import time
 from typing import Callable, Optional
 
@@ -24,6 +26,11 @@ class MeshtasticClient:
         self.on_message = on_message
         self.interface: Optional[meshtastic.serial_interface.SerialInterface] = None
         self.my_node_num: Optional[int] = None
+        self._pending_chunks: dict[int, tuple[int, int, str]] = {}
+        self._ack_events: dict[int, threading.Event] = {}
+        self._msg_queue: queue.Queue = queue.Queue()
+        self._worker: Optional[threading.Thread] = None
+        self._shutdown = threading.Event()
 
     def connect(self, retries: int = 10, retry_delay: float = 15.0):
         for attempt in range(1, retries + 1):
@@ -37,7 +44,13 @@ class MeshtasticClient:
                 )
                 self.my_node_num = self.interface.myInfo.my_node_num
                 logger.info(f"Connected. Node: !{self.my_node_num:08x}")
+                self._log_radio_config()
                 pub.subscribe(self._on_receive, "meshtastic.receive.text")
+                pub.subscribe(self._on_routing, "meshtastic.receive.routing")
+                self._worker = threading.Thread(
+                    target=self._worker_loop, daemon=True, name="mesh-medic-worker"
+                )
+                self._worker.start()
                 logger.info("Listening for messages...")
                 return
             except Exception as e:
@@ -50,9 +63,100 @@ class MeshtasticClient:
             "Unplug and replug the USB cable, then restart the service."
         )
 
+    def _log_airtime(self, when: str):
+        try:
+            my_id = f"!{self.my_node_num:08x}"
+            node = self.interface.nodes.get(my_id, {}) if self.interface.nodes else {}
+            metrics = node.get("deviceMetrics", {}) if isinstance(node, dict) else {}
+            air_tx = metrics.get("airUtilTx")
+            ch_util = metrics.get("channelUtilization")
+            logger.info(
+                "Airtime (%s): air_util_tx=%s%% channel_utilization=%s%%",
+                when,
+                f"{air_tx:.2f}" if isinstance(air_tx, (int, float)) else "?",
+                f"{ch_util:.2f}" if isinstance(ch_util, (int, float)) else "?",
+            )
+        except Exception as e:
+            logger.debug(f"Could not read airtime metrics: {e}")
+
+    def _on_routing(self, packet, interface):
+        try:
+            decoded = packet.get("decoded", {})
+            request_id = decoded.get("requestId")
+            if request_id is None:
+                return
+            chunk_info = self._pending_chunks.pop(request_id, None)
+            routing = decoded.get("routing", {})
+            error = routing.get("errorReason", "NONE")
+            if chunk_info is not None:
+                chunk_num, total, to_id = chunk_info
+                if error == "NONE":
+                    logger.info(
+                        "ACK chunk %d/%d to %s (packet_id=%s)",
+                        chunk_num, total, to_id, request_id,
+                    )
+                else:
+                    logger.warning(
+                        "NAK chunk %d/%d to %s: %s (packet_id=%s)",
+                        chunk_num, total, to_id, error, request_id,
+                    )
+            event = self._ack_events.pop(request_id, None)
+            if event is not None:
+                event.set()
+        except Exception as e:
+            logger.warning(f"Error in routing handler: {e}")
+
+    def _worker_loop(self):
+        logger.info("Worker thread started.")
+        while not self._shutdown.is_set():
+            try:
+                item = self._msg_queue.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            if item is None:
+                break
+            text, from_id, is_dm = item
+            try:
+                reply = self.on_message(text, from_id, is_dm)
+                if reply:
+                    self._send_reply(reply, from_id, is_dm)
+            except Exception as e:
+                logger.error(f"Worker error processing message from {from_id}: {e}", exc_info=True)
+        logger.info("Worker thread exiting.")
+
+    def _log_radio_config(self):
+        try:
+            lora = self.interface.localNode.localConfig.lora
+            from meshtastic.protobuf import config_pb2
+            preset = config_pb2.Config.LoRaConfig.ModemPreset.Name(lora.modem_preset)
+            region = config_pb2.Config.LoRaConfig.RegionCode.Name(lora.region)
+            if lora.use_preset:
+                radio = f"preset={preset}"
+            else:
+                radio = (
+                    f"preset=CUSTOM (bw={lora.bandwidth} sf={lora.spread_factor} "
+                    f"cr={lora.coding_rate})"
+                )
+            ch_name = ""
+            try:
+                ch_name = self.interface.localNode.channels[0].settings.name or "(default)"
+            except Exception:
+                ch_name = "?"
+            logger.info(
+                "Radio config: region=%s %s primary_channel=%r",
+                region, radio, ch_name,
+            )
+        except Exception as e:
+            logger.warning(f"Could not read radio config: {e}")
+
     def disconnect(self):
+        self._shutdown.set()
+        self._msg_queue.put(None)
+        if self._worker is not None:
+            self._worker.join(timeout=5)
         if self.interface:
             pub.unsubscribe(self._on_receive, "meshtastic.receive.text")
+            pub.unsubscribe(self._on_routing, "meshtastic.receive.routing")
             self.interface.close()
             logger.info("Disconnected from Meshtastic device.")
 
@@ -84,9 +188,7 @@ class MeshtasticClient:
             )
             logger.debug("[%s] %s: %r", "DM" if is_dm else "CH", from_id, text)
 
-            reply = self.on_message(text, from_id, is_dm)
-            if reply:
-                self._send_reply(reply, from_id, is_dm)
+            self._msg_queue.put((text, from_id, is_dm))
 
         except Exception as e:
             logger.error(f"Error handling packet: {e}", exc_info=True)
@@ -94,24 +196,63 @@ class MeshtasticClient:
     def _send_reply(self, text: str, to_id: str, is_dm: bool):
         chunks = self._chunk_text(text)
         total = len(chunks)
+        self._log_airtime("before_send")
+
+        # For DMs we wait for each chunk's ACK (firmware retry budget ~15-30s)
+        # then move on immediately. For channel sends there is no ACK, so fall
+        # back to the fixed chunk_delay.
+        ack_timeout = float(self.resp_cfg.chunk_delay)
+        inter_chunk_gap = 1.0
 
         for i, chunk in enumerate(chunks):
             payload = f"[{i+1}/{total}] {chunk}" if total > 1 else chunk
+            event: Optional[threading.Event] = None
+            pkt_id: Optional[int] = None
 
             try:
                 if is_dm:
-                    self.interface.sendText(payload, destinationId=to_id)
+                    pkt = self.interface.sendText(
+                        payload, destinationId=to_id, wantAck=True
+                    )
                 else:
-                    self.interface.sendText(
+                    pkt = self.interface.sendText(
                         payload, channelIndex=self.mesh_cfg.channel_index
                     )
-                logger.info(f"Sent part {i+1}/{total} to {to_id}")
+                pkt_id = getattr(pkt, "id", None) if pkt is not None else None
+                if pkt_id is not None and is_dm:
+                    event = threading.Event()
+                    self._pending_chunks[pkt_id] = (i + 1, total, to_id)
+                    self._ack_events[pkt_id] = event
+                logger.info(
+                    f"Sent part {i+1}/{total} to {to_id} (packet_id={pkt_id})"
+                )
             except Exception as e:
                 logger.error(f"Failed to send message chunk {i+1}: {e}")
                 break
 
-            if i < total - 1:
-                time.sleep(self.resp_cfg.chunk_delay)
+            if event is not None:
+                t0 = time.monotonic()
+                if event.wait(timeout=ack_timeout):
+                    logger.info(
+                        "Chunk %d/%d resolved in %.1fs",
+                        i + 1, total, time.monotonic() - t0,
+                    )
+                else:
+                    # Drop orphaned state — ACK never arrived
+                    self._pending_chunks.pop(pkt_id, None)
+                    self._ack_events.pop(pkt_id, None)
+                    logger.warning(
+                        "No ACK for chunk %d/%d within %.0fs — continuing",
+                        i + 1, total, ack_timeout,
+                    )
+                if i < total - 1:
+                    time.sleep(inter_chunk_gap)
+            else:
+                # Channel send: no ACK semantics, use fixed delay
+                if i < total - 1:
+                    time.sleep(self.resp_cfg.chunk_delay)
+
+        self._log_airtime("after_send")
 
     def _chunk_text(self, text: str) -> list[str]:
         return chunk_text(

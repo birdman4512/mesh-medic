@@ -19,8 +19,8 @@ ollama_model: qwen2.5:1.5b-instruct
 ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
 
 # Radio backend — set radio_type to "meshcore" to use MeshCore instead of Meshtastic
-radio_type: meshcore
-meshtastic_device: /dev/ttyACM0
+radio_type: meshtastic
+meshtastic_device: /dev/ttyACM0   # SEEED XIAO ESP32-S3 native USB CDC
 meshcore_device: /dev/ttyUSB0
 
 # MeshCore device identity & radio parameters
@@ -50,5 +50,5 @@ rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressur
 
 # Response chunking
 response_max_chunk_size: 200
-response_chunk_delay: 5   # seconds between chunks
-response_max_chunks: 15   # maximum number of reply packets
+response_chunk_delay: 30  # for DMs: max seconds to wait for each chunk's ACK before moving on. For channel broadcasts: fixed delay between chunks.
+response_max_chunks: 5    # cap reply at 5 packets so airtime budget isn't blown on one reply
