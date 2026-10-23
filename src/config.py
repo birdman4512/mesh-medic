@@ -1,7 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+RADIO_TYPES = ("meshtastic", "meshcore")
 
 
 @dataclass
@@ -11,9 +13,9 @@ class RadioConfig:
 
 @dataclass
 class MeshtasticConfig:
-    device: str
-    respond_to_channels: bool
-    channel_index: int
+    device: str = "/dev/ttyACM0"
+    respond_to_channels: bool = False
+    channel_index: int = 0
 
 
 @dataclass
@@ -33,6 +35,7 @@ class LLMConfig:
     max_tokens: int
     temperature: float
     system_prompt: str
+    num_ctx: int = 1024  # Ollama context window; prompt + reply must fit inside it
 
 
 @dataclass
@@ -41,6 +44,7 @@ class RAGConfig:
     chunk_overlap: int
     top_k: int
     collection_name: str
+    embedding_model: str = "all-minilm"  # Ollama embedding model (all-MiniLM-L6-v2)
 
 
 @dataclass
@@ -51,9 +55,18 @@ class DataConfig:
 
 @dataclass
 class ResponseConfig:
-    max_chunk_size: int
-    chunk_delay: float
+    max_chunk_size: int          # max UTF-8 bytes per packet, including the [n/m] prefix
+    chunk_delay: float           # pause between parts when there is no ACK to wait for
     max_chunks: int = 15
+    ack_timeout: float = 30.0    # DMs: max seconds to wait for each part's ACK
+    cite_sources: bool = False   # append "[file p.N]" of the best-matching passage
+
+
+@dataclass
+class LimitsConfig:
+    max_queue: int = 5            # questions waiting or in progress before "busy" replies
+    sender_cooldown: float = 30.0 # min seconds between accepted questions from one sender
+    queue_notice: bool = True     # tell senders their place in line when others are ahead
 
 
 @dataclass
@@ -65,6 +78,55 @@ class Config:
     rag: RAGConfig
     data: DataConfig
     response: ResponseConfig
+    limits: LimitsConfig = field(default_factory=LimitsConfig)
+
+
+def _section(cls, raw: dict, name: str, required: bool = False):
+    values = raw.get(name)
+    if values is None:
+        if required:
+            raise ValueError(f"Missing required config section: {name}")
+        values = {}
+    try:
+        return cls(**values)
+    except TypeError as e:
+        raise ValueError(f"Invalid '{name}' config section: {e}") from e
+
+
+def validate(config: Config) -> None:
+    errors = []
+    if config.radio.type not in RADIO_TYPES:
+        errors.append(f"radio.type must be one of {RADIO_TYPES}, got {config.radio.type!r}")
+
+    rag = config.rag
+    if rag.chunk_size <= 0:
+        errors.append("rag.chunk_size must be positive")
+    if not 0 <= rag.chunk_overlap < rag.chunk_size:
+        errors.append("rag.chunk_overlap must be >= 0 and smaller than rag.chunk_size")
+    if rag.top_k < 1:
+        errors.append("rag.top_k must be at least 1")
+
+    resp = config.response
+    if resp.max_chunks < 1:
+        errors.append("response.max_chunks must be at least 1")
+    prefix_len = len(f"[{resp.max_chunks}/{resp.max_chunks}] ")
+    if resp.max_chunk_size < prefix_len + 20:
+        errors.append(f"response.max_chunk_size must be at least {prefix_len + 20}")
+    if resp.chunk_delay < 0:
+        errors.append("response.chunk_delay must be >= 0")
+    if resp.ack_timeout <= 0:
+        errors.append("response.ack_timeout must be positive")
+
+    if config.llm.num_ctx <= config.llm.max_tokens:
+        errors.append("llm.num_ctx must be larger than llm.max_tokens")
+
+    if config.limits.max_queue < 1:
+        errors.append("limits.max_queue must be at least 1")
+    if config.limits.sender_cooldown < 0:
+        errors.append("limits.sender_cooldown must be >= 0")
+
+    if errors:
+        raise ValueError("Invalid config:\n  " + "\n  ".join(errors))
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -73,28 +135,17 @@ def load_config(path: str = "config.yaml") -> Config:
         raise FileNotFoundError(f"Config file not found: {path}")
 
     with open(config_path) as f:
-        raw = yaml.safe_load(f)
+        raw = yaml.safe_load(f) or {}
 
-    radio_raw = raw.get("radio", {})
-    mc_raw = raw.get("meshcore", {})
-
-    return Config(
-        radio=RadioConfig(type=radio_raw.get("type", "meshtastic")),
-        meshtastic=MeshtasticConfig(**raw["meshtastic"]),
-        meshcore=MeshCoreConfig(
-            device=mc_raw.get("device", "/dev/ttyACM0"),
-            respond_to_channels=mc_raw.get("respond_to_channels", False),
-            channel_index=mc_raw.get("channel_index", 0),
-            room_server=mc_raw.get("room_server", ""),
-            room_password=mc_raw.get("room_password", "hello"),
-            room_trigger=mc_raw.get("room_trigger", "?"),
-        ),
-        llm=LLMConfig(**raw["llm"]),
-        rag=RAGConfig(**raw["rag"]),
-        data=DataConfig(**raw["data"]),
-        response=ResponseConfig(
-            max_chunk_size=raw["response"]["max_chunk_size"],
-            chunk_delay=raw["response"]["chunk_delay"],
-            max_chunks=raw["response"].get("max_chunks", 15),
-        ),
+    config = Config(
+        radio=_section(RadioConfig, raw, "radio"),
+        meshtastic=_section(MeshtasticConfig, raw, "meshtastic"),
+        meshcore=_section(MeshCoreConfig, raw, "meshcore"),
+        llm=_section(LLMConfig, raw, "llm", required=True),
+        rag=_section(RAGConfig, raw, "rag", required=True),
+        data=_section(DataConfig, raw, "data", required=True),
+        response=_section(ResponseConfig, raw, "response", required=True),
+        limits=_section(LimitsConfig, raw, "limits"),
     )
+    validate(config)
+    return config

@@ -122,6 +122,10 @@
   ansible.builtin.command: ollama pull {{ ollama_model }}
   changed_when: false
 
+- name: Pull embedding model ({{ ollama_embedding_model }})
+  ansible.builtin.command: ollama pull {{ ollama_embedding_model }}
+  changed_when: false
+
 - name: Pull phi3:mini as backup model
   ansible.builtin.command: ollama pull phi3:mini
   changed_when: false

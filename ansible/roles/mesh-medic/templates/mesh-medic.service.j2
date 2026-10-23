@@ -1,5 +1,5 @@
 [Unit]
-Description=Mesh Medic — Meshtastic LLM Survival Assistant
+Description=Mesh Medic — LoRa mesh LLM Survival Assistant
 After=network.target ollama.service
 Requires=ollama.service
 
@@ -8,7 +8,6 @@ Type=simple
 User={{ mesh_medic_user }}
 WorkingDirectory={{ mesh_medic_install_dir }}
 ExecStart={{ mesh_medic_install_dir }}/venv/bin/python -m src.main
-Environment=HF_HOME={{ mesh_medic_data_dir }}/models
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

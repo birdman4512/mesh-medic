@@ -1,7 +1,9 @@
+import functools
 import logging
-import queue
 import threading
 import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import meshtastic
@@ -12,11 +14,23 @@ from src.utils import chunk_text
 
 logger = logging.getLogger(__name__)
 
-# Type alias: (question, sender_id, is_dm) -> reply string
-MessageHandler = Callable[[str, str, bool], str]
+# (question, sender_id, is_dm, reply_fn) -> None. The handler queues the question and
+# later calls reply_fn(answer) from a worker thread.
+MessageHandler = Callable[[str, str, bool, Callable[[str], None]], None]
 
 # Meshtastic broadcast address
 BROADCAST_NUM = 0xFFFFFFFF
+
+# Pause after an ACKed part before sending the next one
+INTER_CHUNK_GAP = 1.0
+# ACKs that arrive before we registered their packet id are kept briefly
+MAX_EARLY_ACKS = 64
+
+
+@dataclass
+class _AckWaiter:
+    event: threading.Event = field(default_factory=threading.Event)
+    error: Optional[str] = None
 
 
 class MeshtasticClient:
@@ -26,11 +40,10 @@ class MeshtasticClient:
         self.on_message = on_message
         self.interface: Optional[meshtastic.serial_interface.SerialInterface] = None
         self.my_node_num: Optional[int] = None
-        self._pending_chunks: dict[int, tuple[int, int, str]] = {}
-        self._ack_events: dict[int, threading.Event] = {}
-        self._msg_queue: queue.Queue = queue.Queue()
-        self._worker: Optional[threading.Thread] = None
-        self._shutdown = threading.Event()
+        self.connection_lost = threading.Event()
+        self._ack_lock = threading.Lock()
+        self._ack_waiters: dict[int, _AckWaiter] = {}
+        self._early_acks: "OrderedDict[int, str]" = OrderedDict()
 
     def connect(self, retries: int = 10, retry_delay: float = 15.0):
         for attempt in range(1, retries + 1):
@@ -47,10 +60,7 @@ class MeshtasticClient:
                 self._log_radio_config()
                 pub.subscribe(self._on_receive, "meshtastic.receive.text")
                 pub.subscribe(self._on_routing, "meshtastic.receive.routing")
-                self._worker = threading.Thread(
-                    target=self._worker_loop, daemon=True, name="mesh-medic-worker"
-                )
-                self._worker.start()
+                pub.subscribe(self._on_connection_lost, "meshtastic.connection.lost")
                 logger.info("Listening for messages...")
                 return
             except Exception as e:
@@ -62,6 +72,10 @@ class MeshtasticClient:
             f"Could not connect to {self.mesh_cfg.device} after {retries} attempts. "
             "Unplug and replug the USB cable, then restart the service."
         )
+
+    def _on_connection_lost(self, interface=None):
+        logger.error("Lost connection to Meshtastic device %s", self.mesh_cfg.device)
+        self.connection_lost.set()
 
     def _log_airtime(self, when: str):
         try:
@@ -85,44 +99,19 @@ class MeshtasticClient:
             request_id = decoded.get("requestId")
             if request_id is None:
                 return
-            chunk_info = self._pending_chunks.pop(request_id, None)
-            routing = decoded.get("routing", {})
-            error = routing.get("errorReason", "NONE")
-            if chunk_info is not None:
-                chunk_num, total, to_id = chunk_info
-                if error == "NONE":
-                    logger.info(
-                        "ACK chunk %d/%d to %s (packet_id=%s)",
-                        chunk_num, total, to_id, request_id,
-                    )
-                else:
-                    logger.warning(
-                        "NAK chunk %d/%d to %s: %s (packet_id=%s)",
-                        chunk_num, total, to_id, error, request_id,
-                    )
-            event = self._ack_events.pop(request_id, None)
-            if event is not None:
-                event.set()
+            error = decoded.get("routing", {}).get("errorReason", "NONE")
+            with self._ack_lock:
+                waiter = self._ack_waiters.pop(request_id, None)
+                if waiter is None:
+                    # The ACK can beat sendText() returning the packet id to us.
+                    self._early_acks[request_id] = error
+                    while len(self._early_acks) > MAX_EARLY_ACKS:
+                        self._early_acks.popitem(last=False)
+                    return
+            waiter.error = error
+            waiter.event.set()
         except Exception as e:
             logger.warning(f"Error in routing handler: {e}")
-
-    def _worker_loop(self):
-        logger.info("Worker thread started.")
-        while not self._shutdown.is_set():
-            try:
-                item = self._msg_queue.get(timeout=1.0)
-            except queue.Empty:
-                continue
-            if item is None:
-                break
-            text, from_id, is_dm = item
-            try:
-                reply = self.on_message(text, from_id, is_dm)
-                if reply:
-                    self._send_reply(reply, from_id, is_dm)
-            except Exception as e:
-                logger.error(f"Worker error processing message from {from_id}: {e}", exc_info=True)
-        logger.info("Worker thread exiting.")
 
     def _log_radio_config(self):
         try:
@@ -150,14 +139,20 @@ class MeshtasticClient:
             logger.warning(f"Could not read radio config: {e}")
 
     def disconnect(self):
-        self._shutdown.set()
-        self._msg_queue.put(None)
-        if self._worker is not None:
-            self._worker.join(timeout=5)
         if self.interface:
-            pub.unsubscribe(self._on_receive, "meshtastic.receive.text")
-            pub.unsubscribe(self._on_routing, "meshtastic.receive.routing")
-            self.interface.close()
+            for listener, topic in (
+                (self._on_receive, "meshtastic.receive.text"),
+                (self._on_routing, "meshtastic.receive.routing"),
+                (self._on_connection_lost, "meshtastic.connection.lost"),
+            ):
+                try:
+                    pub.unsubscribe(listener, topic)
+                except Exception:
+                    pass
+            try:
+                self.interface.close()
+            except Exception as e:
+                logger.warning(f"Error closing Meshtastic interface: {e}")
             logger.info("Disconnected from Meshtastic device.")
 
     def _on_receive(self, packet, interface):
@@ -168,7 +163,7 @@ class MeshtasticClient:
                 return
 
             from_num = packet.get("from", 0)
-            from_id = packet.get("fromId", f"!{from_num:08x}")
+            from_id = packet.get("fromId") or f"!{from_num:08x}"
             to_num = packet.get("to", BROADCAST_NUM)
 
             # Ignore our own messages
@@ -177,8 +172,11 @@ class MeshtasticClient:
 
             is_dm = to_num == self.my_node_num
 
-            if not is_dm and not self.mesh_cfg.respond_to_channels:
-                return
+            if not is_dm:
+                if not self.mesh_cfg.respond_to_channels:
+                    return
+                if packet.get("channel", 0) != self.mesh_cfg.channel_index:
+                    return
 
             logger.info(
                 "[%s] Message from %s (%d chars)",
@@ -188,25 +186,30 @@ class MeshtasticClient:
             )
             logger.debug("[%s] %s: %r", "DM" if is_dm else "CH", from_id, text)
 
-            self._msg_queue.put((text, from_id, is_dm))
+            reply = functools.partial(self._send_reply, to_id=from_id, is_dm=is_dm)
+            self.on_message(text, from_id, is_dm, reply)
 
         except Exception as e:
             logger.error(f"Error handling packet: {e}", exc_info=True)
+
+    def _register_ack(self, pkt_id: int) -> _AckWaiter:
+        waiter = _AckWaiter()
+        with self._ack_lock:
+            if pkt_id in self._early_acks:
+                waiter.error = self._early_acks.pop(pkt_id)
+                waiter.event.set()
+            else:
+                self._ack_waiters[pkt_id] = waiter
+        return waiter
 
     def _send_reply(self, text: str, to_id: str, is_dm: bool):
         chunks = self._chunk_text(text)
         total = len(chunks)
         self._log_airtime("before_send")
 
-        # For DMs we wait for each chunk's ACK (firmware retry budget ~15-30s)
-        # then move on immediately. For channel sends there is no ACK, so fall
-        # back to the fixed chunk_delay.
-        ack_timeout = float(self.resp_cfg.chunk_delay)
-        inter_chunk_gap = 1.0
-
         for i, chunk in enumerate(chunks):
             payload = f"[{i+1}/{total}] {chunk}" if total > 1 else chunk
-            event: Optional[threading.Event] = None
+            waiter: Optional[_AckWaiter] = None
             pkt_id: Optional[int] = None
 
             try:
@@ -220,9 +223,7 @@ class MeshtasticClient:
                     )
                 pkt_id = getattr(pkt, "id", None) if pkt is not None else None
                 if pkt_id is not None and is_dm:
-                    event = threading.Event()
-                    self._pending_chunks[pkt_id] = (i + 1, total, to_id)
-                    self._ack_events[pkt_id] = event
+                    waiter = self._register_ack(pkt_id)
                 logger.info(
                     f"Sent part {i+1}/{total} to {to_id} (packet_id={pkt_id})"
                 )
@@ -230,27 +231,33 @@ class MeshtasticClient:
                 logger.error(f"Failed to send message chunk {i+1}: {e}")
                 break
 
-            if event is not None:
+            if waiter is not None:
+                # DMs: wait for this part's ACK (firmware retries for ~15-30s), then move on.
                 t0 = time.monotonic()
-                if event.wait(timeout=ack_timeout):
-                    logger.info(
-                        "Chunk %d/%d resolved in %.1fs",
-                        i + 1, total, time.monotonic() - t0,
-                    )
+                if waiter.event.wait(timeout=self.resp_cfg.ack_timeout):
+                    elapsed = time.monotonic() - t0
+                    if waiter.error == "NONE":
+                        logger.info(
+                            "ACK chunk %d/%d to %s in %.1fs (packet_id=%s)",
+                            i + 1, total, to_id, elapsed, pkt_id,
+                        )
+                    else:
+                        logger.warning(
+                            "NAK chunk %d/%d to %s: %s (packet_id=%s)",
+                            i + 1, total, to_id, waiter.error, pkt_id,
+                        )
                 else:
-                    # Drop orphaned state — ACK never arrived
-                    self._pending_chunks.pop(pkt_id, None)
-                    self._ack_events.pop(pkt_id, None)
+                    with self._ack_lock:
+                        self._ack_waiters.pop(pkt_id, None)
                     logger.warning(
                         "No ACK for chunk %d/%d within %.0fs — continuing",
-                        i + 1, total, ack_timeout,
+                        i + 1, total, self.resp_cfg.ack_timeout,
                     )
                 if i < total - 1:
-                    time.sleep(inter_chunk_gap)
-            else:
+                    time.sleep(INTER_CHUNK_GAP)
+            elif i < total - 1:
                 # Channel send: no ACK semantics, use fixed delay
-                if i < total - 1:
-                    time.sleep(self.resp_cfg.chunk_delay)
+                time.sleep(self.resp_cfg.chunk_delay)
 
         self._log_airtime("after_send")
 

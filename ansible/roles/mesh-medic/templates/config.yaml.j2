@@ -19,6 +19,7 @@ llm:
   base_url: http://localhost:11434
   max_tokens: {{ llm_max_tokens }}
   temperature: {{ llm_temperature }}
+  num_ctx: {{ llm_num_ctx }}
   system_prompt: |
     You are a survival expert responding over a slow text radio. Every character costs airtime.
     Give only the most critical, actionable steps. Lead with the single most urgent action.
@@ -32,6 +33,7 @@ rag:
   chunk_overlap: 64
   top_k: {{ rag_top_k }}
   collection_name: survival_docs
+  embedding_model: {{ ollama_embedding_model }}
 
 data:
   pdf_dir: {{ mesh_medic_data_dir }}/pdfs
@@ -39,5 +41,12 @@ data:
 
 response:
   max_chunk_size: {{ response_max_chunk_size }}
+  ack_timeout: {{ response_ack_timeout }}
   chunk_delay: {{ response_chunk_delay }}
   max_chunks: {{ response_max_chunks }}
+  cite_sources: {{ response_cite_sources | bool | lower }}
+
+limits:
+  max_queue: {{ limits_max_queue }}
+  sender_cooldown: {{ limits_sender_cooldown }}
+  queue_notice: {{ limits_queue_notice | bool | lower }}

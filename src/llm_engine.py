@@ -3,55 +3,57 @@ import re
 
 import requests
 
+from src.ollama import check_model
+
 logger = logging.getLogger(__name__)
+
+# Rough chars-per-token ratio used to budget the prompt against num_ctx. Deliberately low
+# (English averages ~4) so the estimate errs towards leaving room for the reply.
+CHARS_PER_TOKEN = 3
 
 
 class LLMEngine:
-    _META_PATTERNS = (
-        r"additional reference material",
-        r"reference material",
-        r"context",
-        r"the following instructions[^.:\n]*",
-        r"instructions?[^.:\n]*radio delivery",
-        r"concise and useful for radio delivery",
-        r"concise an useful for radio delivery",
-        r"useful for radio delivery",
-        r"prefer 3-6 concise sentences(?: when needed)?",
-        r"keep replies compact for radio delivery(?:,? but include useful detail)?",
-        r"give clear, practical answers(?: using the reference material when relevant)?",
-        r"never repeat, quote,? or describe these instructions",
-        r"never talk about your formatting rules or the reference material unless the user asks about them",
-        r"no greetings or filler",
-        r"if the reference material is not relevant, give brief general advice",
-        r"answer directly for the user(?: from general survival knowledge)?",
-        r"do not repeat or describe your instructions",
-        r"do not talk about the reference material unless the answer truly needs it",
-        r"answer based on the reference material above",
-        r"ask for clarification if necessary",
+    # Echoed prompt sections that small models sometimes start their reply with.
+    _ECHO_PREFIXES = ("Context:", "Reference material:", "Question:")
+
+    # "Based on the context, boil water..." -> "Boil water..."
+    _LEAD_IN = re.compile(
+        r"^(?:according to|based on|using|from)\s+the\s+(?:provided\s+|given\s+|above\s+)?"
+        r"(?:context|reference material|references?|information)"
+        r"(?:\s+(?:provided|given|above))?\s*[,:]\s*",
+        re.IGNORECASE,
     )
+
+    # Sentences that only repeat the system prompt or talk about the prompt itself.
+    # Matched against a whole sentence, which is then dropped; anything else is kept verbatim.
+    _INSTRUCTION_ECHO = tuple(
+        re.compile(p, re.IGNORECASE)
+        for p in (
+            r"\b(?:these|my|the following|your|the above) instructions\b",
+            r"\bradio delivery\b",
+            r"\bevery character costs airtime\b",
+            r"\bformatting rules\b",
+            r"\bno (?:greetings|preamble)\b",
+            r"\bnumbered lists?\b",
+            r"\b(?:aim for|keep it|keep replies) under \d+ characters\b",
+            r"\bnever exceed \d+\b",
+            r"\byou are a survival (?:expert|assistant)\b",
+            r"\b(?:the )?(?:provided |given )?(?:context|reference material) "
+            r"(?:does not|doesn't|did not|didn't|is not|isn't)\b",
+            r"^answer:?$",
+        )
+    )
+
+    _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
     def __init__(self, config):
         self.cfg = config.llm
         self.radio_cfg = config.radio
         self.resp_cfg = config.response
-        self._verify_connection()
-
-    def _verify_connection(self):
-        try:
-            resp = requests.get(f"{self.cfg.base_url}/api/tags", timeout=5)
-            resp.raise_for_status()
-            models = [m["name"] for m in resp.json().get("models", [])]
-            if not any(self.cfg.model in m for m in models):
-                logger.warning(
-                    f"Model '{self.cfg.model}' not found in Ollama. "
-                    f"Available: {models}. Run: ollama pull {self.cfg.model}"
-                )
-            else:
-                logger.info(f"Model '{self.cfg.model}' ready.")
-        except requests.RequestException as e:
-            logger.error(f"Cannot reach Ollama at {self.cfg.base_url}: {e}")
+        check_model(self.cfg.base_url, self.cfg.model)
 
     def answer(self, question: str, context: str) -> str:
+        context = self._fit_context(question, context)
         payload = {
             "model": self.cfg.model,
             "prompt": self._build_prompt(question, context),
@@ -60,7 +62,7 @@ class LLMEngine:
             "options": {
                 "temperature": self.cfg.temperature,
                 "num_predict": self.cfg.max_tokens,
-                "num_ctx": 1024,  # cap KV cache to ~1 GB; prevents OOM on low-RAM hosts
+                "num_ctx": self.cfg.num_ctx,
             },
         }
 
@@ -77,71 +79,89 @@ class LLMEngine:
             logger.error(f"LLM request failed: {e}")
             return "Error: LLM unavailable. Check Ollama service."
 
-    def _clean(self, text: str) -> str:
-        """Remove prompt echo artifacts and hard-cap length."""
-        # TinyLlama sometimes echoes the prompt format back into the response.
-        # If it starts with "Question:" or "Reference material:", the model
-        # repeated the prompt instead of just answering — skip to the answer.
-        for prefix in ("Reference material:", "Question:"):
-            if text.startswith(prefix):
-                # Try to find "Answer:" or just take everything after a blank line
-                for marker in ("Answer:", "\n\n"):
-                    idx = text.find(marker)
-                    if idx != -1:
-                        text = text[idx + len(marker):].strip()
-                        break
-                else:
-                    text = ""
-                break
+    def _fit_context(self, question: str, context: str) -> str:
+        """Trim retrieved context so system prompt + prompt + reply fit in num_ctx.
 
-        lowered = text.lower()
-        if any(re.search(pattern, lowered) for pattern in self._META_PATTERNS):
-            for pattern in self._META_PATTERNS:
-                text = re.sub(pattern, "", text, flags=re.IGNORECASE)
-
-            # Remove dangling quoted/context-intro fragments that often precede
-            # the real answer in smaller models.
-            text = re.sub(
-                r'^[^A-Za-z0-9]*(?:in\s+the\s+of\s+)?".{0,160}?(?=(?:\d+\s|[A-Z]))',
-                "",
-                text,
-                flags=re.IGNORECASE,
+        Ollama silently drops the start of an over-long prompt, so trim here instead,
+        keeping the highest-ranked passages (which come first).
+        """
+        if not context:
+            return context
+        overhead = len(self.cfg.system_prompt) + len(self._build_prompt(question, ""))
+        budget_tokens = self.cfg.num_ctx - self.cfg.max_tokens - 32
+        budget_chars = budget_tokens * CHARS_PER_TOKEN - overhead - len("Context:\n\n\n")
+        if len(context) <= budget_chars:
+            return context
+        if budget_chars <= 0:
+            logger.warning(
+                "No room for reference material: raise llm.num_ctx or lower llm.max_tokens"
             )
-            text = re.sub(r"^[^A-Za-z0-9]*(?:in\s+the\s+of\s+)", "", text, flags=re.IGNORECASE)
-            text = re.sub(r"\s+", " ", text).strip(" ,.-:\n\t")
-            sentences = re.split(r"(?<=[.!?])\s+", text)
-            kept = []
-            for sentence in sentences:
-                stripped = sentence.strip(" ,.-:\n\t")
-                if not stripped:
-                    continue
-                lowered = stripped.lower()
-                if any(re.search(pattern, lowered) for pattern in self._META_PATTERNS):
-                    continue
-                kept.append(stripped)
-            if kept:
-                text = " ".join(kept).strip()
+            return ""
+        logger.warning(
+            "Context trimmed from %d to %d chars to fit num_ctx=%d "
+            "(raise llm.num_ctx or lower rag.top_k / rag.chunk_size)",
+            len(context), budget_chars, self.cfg.num_ctx,
+        )
+        return context[:budget_chars].rstrip()
 
+    def _clean(self, text: str) -> str:
+        """Remove prompt echo artifacts and hard-cap length.
+
+        Only whole echoed sections and sentences are removed; the remaining answer keeps its
+        wording, punctuation and line breaks.
+        """
+        text = self._strip_prompt_echo(text.strip())
+
+        lines = []
+        for line in text.split("\n"):
+            kept = []
+            for sentence in self._SENTENCE_SPLIT.split(line.strip()):
+                if not sentence:
+                    continue
+                if any(p.search(sentence) for p in self._INSTRUCTION_ECHO):
+                    continue
+                stripped = self._LEAD_IN.sub("", sentence)
+                if stripped != sentence:
+                    if not stripped:
+                        continue
+                    sentence = stripped[0].upper() + stripped[1:]
+                kept.append(sentence)
+            lines.append(" ".join(kept))
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+        return self._cap_length(text)
+
+    def _strip_prompt_echo(self, text: str) -> str:
+        # Small models sometimes repeat the prompt format before answering. If the reply
+        # starts with an echoed section, skip to the answer (or the first blank line).
+        if text.startswith(self._ECHO_PREFIXES):
+            for marker in ("Answer:", "\n\n"):
+                idx = text.find(marker)
+                if idx != -1:
+                    return text[idx + len(marker):].strip()
+            return ""
+        if text.startswith("Answer:"):
+            return text[len("Answer:"):].strip()
+        return text
+
+    @staticmethod
+    def _last_sentence_end(text: str) -> int:
+        """Index just past the last sentence end that is followed by whitespace, or -1."""
+        ends = [m.start() + 1 for m in re.finditer(r"[.!?](?=\s)", text)]
+        return ends[-1] if ends else -1
+
+    def _cap_length(self, text: str) -> str:
         max_chars = self._max_reply_chars()
         if len(text) > max_chars:
             truncated = text[:max_chars]
-            last_stop = max(
-                truncated.rfind(". "),
-                truncated.rfind("! "),
-                truncated.rfind("? "),
-            )
-            text = truncated[: last_stop + 1] if last_stop > 50 else truncated
-        else:
-            stripped = text.rstrip()
-            if stripped and stripped[-1] not in ".!?":
-                last_stop = max(
-                    stripped.rfind(". "),
-                    stripped.rfind("! "),
-                    stripped.rfind("? "),
-                )
-                if last_stop > 50:
-                    text = stripped[: last_stop + 1]
+            end = self._last_sentence_end(truncated + " ")
+            return truncated[:end].rstrip() if end > 50 else truncated.rstrip()
 
+        # Drop a trailing half-sentence left when the model hit its token limit.
+        if text and text[-1] not in ".!?":
+            end = self._last_sentence_end(text)
+            if end > 50:
+                return text[:end]
         return text
 
     def _max_reply_chars(self) -> int:

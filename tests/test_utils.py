@@ -1,4 +1,4 @@
-from src.utils import chunk_text
+from src.utils import chunk_document, chunk_text, utf8_len
 
 
 def test_short_text_returned_as_single_chunk():
@@ -83,3 +83,65 @@ def test_does_not_emit_marker_only_chunk():
     text = "1. First item is long enough to wrap.\n2. Second item starts here.\n3. Third item."
     chunks = chunk_text(text, 20, max_chunks=10)
     assert all(chunk.strip() not in {"1.", "2.", "3."} for chunk in chunks)
+
+
+def test_chunks_respect_utf8_byte_limit():
+    # "–" and "°" are 3 and 2 bytes; a character count would overflow the packet.
+    text = "Boil water – 1 min at sea level, 3 min above 2000 m° " * 10
+    chunks = chunk_text(text.strip(), 60, max_chunks=10)
+    prefix = len("[10/10] ")
+    assert all(len(c.encode("utf-8")) <= 60 - prefix for c in chunks)
+
+
+def test_multibyte_text_within_byte_limit_is_single_chunk():
+    assert chunk_text("Keep warm – 37°C", 200) == ["Keep warm – 37°C"]
+
+
+def test_short_char_count_but_long_in_bytes_is_split():
+    text = "é" * 30  # 30 chars, 60 bytes
+    chunks = chunk_text(text, 40)
+    assert len(chunks) == 2
+    assert all(len(c.encode("utf-8")) <= 40 for c in chunks)
+    assert "".join(chunks) == text
+
+
+def test_utf8_len():
+    assert utf8_len("abc") == 3
+    assert utf8_len("–") == 3
+
+
+def test_chunk_document_splits_at_sentences_and_tracks_pages():
+    pages = [
+        (1, "Find shelter first. Stay dry and out of the wind."),
+        (2, "Water comes next. Boil it for one minute. Filter through cloth."),
+    ]
+    chunks = chunk_document(pages, size=60, overlap=0)
+    texts = [t for t, _ in chunks]
+    assert all(len(t) <= 60 for t in texts)
+    assert all(t.endswith(".") for t in texts)  # never cut mid-sentence
+    assert chunks[0][1] == 1
+    assert any(page == 2 and t.startswith("Water") for t, page in chunks)
+
+
+def test_chunk_document_overlap_carries_whole_sentences():
+    pages = [(1, "One two. Three four. Five six. Seven eight.")]
+    chunks = chunk_document(pages, size=22, overlap=11)
+    assert [t for t, _ in chunks] == ["One two. Three four.", "Three four. Five six.", "Five six. Seven eight."]
+
+
+def test_chunk_document_rejoins_hyphenated_words_and_lines():
+    chunks = chunk_document([(3, "Apply pres-\nsure to the\nwound.")], size=100, overlap=0)
+    assert chunks == [("Apply pressure to the wound.", 3)]
+
+
+def test_chunk_document_splits_overlong_sentence():
+    chunks = chunk_document([(1, "word " * 50)], size=30, overlap=5)
+    assert chunks
+    assert all(len(t) <= 30 for t, _ in chunks)
+
+
+def test_chunk_document_rejects_overlap_not_smaller_than_size():
+    import pytest
+
+    with pytest.raises(ValueError):
+        chunk_document([(1, "text")], size=10, overlap=10)

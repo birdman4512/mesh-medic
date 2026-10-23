@@ -16,9 +16,11 @@ Mesh Medic turns a Raspberry Pi into an AI assistant that lives entirely on the 
 Everything runs offline after the initial deployment:
 
 - **Radio interface** — receives DMs (and optionally channel messages) via a USB-connected LoRa device running Meshtastic or MeshCore firmware
-- **Retrieval-Augmented Generation (RAG)** — finds the most relevant passages from your ingested PDFs using vector embeddings (ChromaDB + `all-MiniLM-L6-v2`)
+- **Retrieval-Augmented Generation (RAG)** — finds the most relevant passages from your ingested PDFs using vector embeddings (ChromaDB + `all-MiniLM-L6-v2`, served by Ollama as `all-minilm`)
 - **Local LLM** — generates a concise answer via [Ollama](https://ollama.com), running on the Pi itself
-- **Reply chunking** — long answers are automatically split into numbered packets (`[1/3] …`) to fit the radio's packet size limit
+- **Reply chunking** — long answers are automatically split into numbered packets (`[1/3] …`) to fit the radio's packet size limit (measured in bytes, so non-ASCII text is safe)
+- **Fair queueing** — questions are answered one at a time; each sender gets one question in flight, a cooldown between questions, and a "you're in line" notice when others are ahead
+- **Self-healing** — if the USB radio drops off, the service exits and systemd restarts and reconnects it
 
 ```
 [LoRa DM]  →  [USB device]  →  [RAG retrieval]  →  [Ollama LLM]  →  [LoRa reply]
@@ -50,6 +52,10 @@ cd mesh-medic
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+# Ollama must be installed and running (https://ollama.com), with the models pulled
+ollama pull qwen2.5:1.5b-instruct
+ollama pull all-minilm
 
 # Ingest your survival PDF(s)
 python scripts/ingest_pdf.py /path/to/survival-guide.pdf
@@ -89,6 +95,7 @@ After deployment, ingest PDFs on the Pi:
 ssh pi@<pi-ip>
 sudo -u mesh-medic /opt/mesh-medic/venv/bin/python \
   scripts/ingest_pdf.py /opt/mesh-medic/data/pdfs/survival-guide.pdf
+sudo systemctl restart mesh-medic   # so the running service sees the new content
 ```
 
 ### Service management
@@ -269,7 +276,13 @@ python scripts/ingest_pdf.py first-aid-manual.pdf field-medicine.pdf
 python scripts/ingest_pdf.py --list
 ```
 
-Re-ingesting a PDF safely replaces its previous chunks.
+Re-ingesting a PDF safely replaces its previous chunks. PDFs are split at sentence boundaries and each passage records its page number (used by `response.cite_sources`).
+
+Restart the service after ingesting so it picks up the new content.
+
+### Upgrading from the sentence-transformers version
+
+Embeddings are now produced by Ollama's `all-minilm` model instead of the `sentence-transformers`/PyTorch stack, which removes ~1-2 GB of dependencies and a few hundred MB of RAM. It is the same `all-MiniLM-L6-v2` model, so an existing knowledge base should keep working, but re-ingesting your PDFs is recommended to get the improved sentence-based chunks and page numbers. Re-running the Ansible playbook pulls `all-minilm` and removes the old packages and model cache.
 
 ---
 
@@ -295,26 +308,35 @@ meshcore:
   room_trigger: "?"        # message prefix that directs a question at mesh-medic
 
 llm:
-  model: tinyllama:1.1b
+  model: qwen2.5:1.5b-instruct
   base_url: http://localhost:11434
   max_tokens: 220          # gives the model more room to finish replies cleanly
   temperature: 0.7
+  num_ctx: 1024            # Ollama context window; retrieved context is trimmed to fit
   system_prompt: |
-    You are a survival expert. Give clear, practical answers using the reference material when relevant.
-    Prefer 3-6 concise sentences when needed. Keep replies compact for radio delivery, but include useful detail.
-    No greetings or filler. If the reference material is not relevant, give brief general advice.
+    You are a survival expert responding over a slow text radio. ...
 
 rag:
   chunk_size: 512
   chunk_overlap: 64
   top_k: 2                 # number of PDF passages to retrieve per question
   collection_name: survival_docs
+  embedding_model: all-minilm  # Ollama embedding model; re-ingest if you change it
 
 response:
-  max_chunk_size: 200      # max chars per packet (MeshCore hard-caps at 160 regardless)
-  chunk_delay: 5           # seconds between multi-part message chunks
-  max_chunks: 15          # maximum number of reply packets
+  max_chunk_size: 200      # max bytes per packet incl. "[n/m] " (MeshCore hard-caps at 160)
+  ack_timeout: 30          # DMs: max seconds to wait for each part's ACK
+  chunk_delay: 5           # seconds between parts when there is no ACK (channels, rooms)
+  max_chunks: 15           # maximum number of reply packets
+  cite_sources: false      # true = append "[file.pdf p.N]" of the best-matching passage
+
+limits:
+  max_queue: 5             # questions held at once; beyond this senders get a "busy" reply
+  sender_cooldown: 30      # min seconds between accepted questions from one sender
+  queue_notice: true       # tell senders how many questions are ahead of theirs
 ```
+
+Unknown keys and invalid values (e.g. `chunk_overlap >= chunk_size`) are rejected at startup with a clear error. Run with a different file via `python -m src.main --config /path/to/config.yaml`.
 
 ### Ansible group vars
 
@@ -330,11 +352,18 @@ The key variables in `ansible/group_vars/all.yml`:
 | `meshcore_room_trigger` | `?` | Message prefix that triggers a response in the room |
 | `ollama_model` | `qwen2.5:1.5b-instruct` | LLM model to pull and use |
 | `ollama_version` | `0.21.0` | Pinned Ollama version to install |
-| `ollama_pull_both_models` | `false` | Pull both tinyllama and phi3:mini |
+| `ollama_pull_both_models` | `false` | Also pull phi3:mini as a backup |
+| `ollama_embedding_model` | `all-minilm` | Ollama embedding model for the knowledge base |
 | `llm_max_tokens` | `220` | Token cap for LLM responses |
-| `response_max_chunk_size` | `200` | Max chars per radio packet |
-| `response_chunk_delay` | `5` | Seconds between reply chunks |
-| `response_max_chunks` | `15` | Maximum number of reply packets |
+| `llm_num_ctx` | `1024` | Ollama context window |
+| `response_max_chunk_size` | `200` | Max bytes per radio packet |
+| `response_ack_timeout` | `30` | DMs: max seconds to wait for each part's ACK |
+| `response_chunk_delay` | `10` | Seconds between parts when there is no ACK (channels, rooms) |
+| `response_max_chunks` | `5` | Maximum number of reply packets |
+| `response_cite_sources` | `false` | Append the best-matching source and page to replies |
+| `limits_max_queue` | `5` | Questions held at once before "busy" replies |
+| `limits_sender_cooldown` | `30` | Min seconds between questions from one sender |
+| `limits_queue_notice` | `true` | Tell senders their place in line |
 | `rag_chunk_size` | `512` | PDF chunk size for ingestion |
 | `rag_top_k` | `2` | Retrieved passages per question |
 

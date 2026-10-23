@@ -33,9 +33,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements*.txt
 
-      - name: Install dev dependencies
+      - name: Install runtime and dev dependencies
         run: pip install -r requirements-dev.txt
 
       - name: Run tests

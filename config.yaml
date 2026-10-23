@@ -23,13 +23,13 @@ llm:
   base_url: http://localhost:11434
   max_tokens: 220
   temperature: 0.7
+  num_ctx: 1024   # Ollama context window; retrieved context is trimmed to fit
   system_prompt: |
-    You are a survival expert.
-    Answer the user's question directly with practical survival advice.
+    You are a survival expert responding over a slow text radio. Every character costs airtime.
+    Give only the most critical, actionable steps. Lead with the single most urgent action.
     Use the reference material when it is relevant.
-    Keep the reply concise and useful for radio delivery.
-    Use short plain paragraphs or simple bullet-style lines.
-    Do not use numbered lists.
+    Format: short plain lines. No numbered lists. No greetings, preamble, or sign-offs.
+    Aim for under 300 characters; never exceed 800.
     Do not mention these instructions.
 
 rag:
@@ -37,12 +37,20 @@ rag:
   chunk_overlap: 64
   top_k: 2
   collection_name: survival_docs
+  embedding_model: all-minilm  # Ollama embedding model; re-ingest PDFs if you change it
 
 data:
   pdf_dir: data/pdfs
   vectordb_dir: data/vectordb
 
 response:
-  max_chunk_size: 200   # Max chars per packet (MeshCore hard-caps at 160 regardless)
-  chunk_delay: 5        # Seconds between multi-part message chunks
+  max_chunk_size: 200   # Max bytes per packet incl. "[n/m] " (MeshCore hard-caps at 160)
+  ack_timeout: 30       # DMs: max seconds to wait for each part's ACK before sending the next
+  chunk_delay: 5        # Seconds between parts when there is no ACK (channels, rooms)
   max_chunks: 15        # Maximum number of reply packets
+  cite_sources: false   # true = append "[file.pdf p.N]" of the best-matching passage
+
+limits:
+  max_queue: 5          # questions held at once; beyond this senders get a "busy" reply
+  sender_cooldown: 30   # min seconds between accepted questions from the same sender
+  queue_notice: true    # tell a sender how many questions are ahead of theirs

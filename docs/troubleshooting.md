@@ -116,15 +116,29 @@ sudo systemctl enable ollama   # start on boot
 
 **Cause:** If `max_tokens` is set too high the LLM generates responses that split into 3+ Meshtastic packets. At 2 s between packets some are lost in transit.
 
-**Fix:** Keep `max_tokens` at 80 (≈320 chars = 1–2 packets) and `chunk_delay` at 5 s in `config.yaml`:
+**Fix:** Lower `max_tokens` and `max_chunks`, and give DMs enough time to be acknowledged. For DMs each part waits for its ACK (up to `ack_timeout`); for channel messages, where there is no ACK, `chunk_delay` sets the gap between parts:
 
 ```yaml
 llm:
-  max_tokens: 80
+  max_tokens: 120
 
 response:
-  chunk_delay: 5
+  max_chunks: 3
+  ack_timeout: 30
+  chunk_delay: 10
 ```
+
+---
+
+### Service restarts by itself
+
+**Cause:** The radio's USB connection dropped (loose cable, brown-out, firmware reboot). Mesh Medic detects this, logs `Radio connection lost — exiting so the service restarts`, and systemd restarts it after 15 s to reconnect. This is expected; if it happens often, check the cable and the power supply.
+
+---
+
+### Sender gets "Busy" or no reply to a second question
+
+Each sender can have one question in progress and must wait `limits.sender_cooldown` seconds (default 30) between questions; extra messages inside the cooldown are ignored. When `limits.max_queue` questions are already waiting, new senders get a "Busy" reply. Adjust these under `limits:` in `config.yaml`.
 
 ---
 
@@ -163,7 +177,7 @@ sudo git config --global --add safe.directory /opt/mesh-medic
 OSError: [Errno 28] No space left on device
 ```
 
-**Cause:** Default VM disk is too small. PyTorch (CPU-only build) + Ollama models need ~5–8 GB free.
+**Cause:** Default VM disk is too small. Ollama models plus the Python dependencies need ~3–5 GB free.
 
 **Fix — expand an LVM-based VM disk:**
 ```bash
@@ -178,14 +192,14 @@ df -h                             # verify free space
 
 ---
 
-### HuggingFace model download fails — permission denied
+### Embedding model missing — "Model 'all-minilm' not found"
 
-**Cause:** The `mesh-medic` system user has no home directory, so the default HF cache path (`~/.cache/huggingface`) doesn't exist.
+**Cause:** The knowledge base embeddings come from Ollama's `all-minilm` model, which hasn't been pulled.
 
-**Fix:** `HF_HOME` is set to `/opt/mesh-medic/data/models` in the systemd service unit and in the Ansible pre-download task. Verify:
+**Fix:**
 ```bash
-sudo systemctl cat mesh-medic | grep HF_HOME
-# should show: Environment=HF_HOME=/opt/mesh-medic/data/models
+ollama pull all-minilm
+sudo systemctl restart mesh-medic
 ```
 
 ---

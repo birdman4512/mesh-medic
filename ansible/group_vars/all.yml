@@ -17,6 +17,9 @@ mesh_medic_version: main
 ollama_version: "0.21.0"
 ollama_model: qwen2.5:1.5b-instruct
 ollama_pull_both_models: false  # set true to also pull phi3:mini as a backup
+# Embedding model for the PDF knowledge base (all-MiniLM-L6-v2, ~46 MB).
+# Changing it means re-ingesting your PDFs.
+ollama_embedding_model: all-minilm
 
 # Radio backend — set radio_type to "meshcore" to use MeshCore instead of Meshtastic
 radio_type: meshtastic
@@ -43,6 +46,7 @@ meshcore_room_trigger: "?"
 # LLM parameters
 llm_max_tokens: 220    # Gives the model more room to finish replies cleanly
 llm_temperature: 0.7
+llm_num_ctx: 1024      # Ollama context window; retrieved context is trimmed to fit
 
 # RAG parameters
 rag_chunk_size: 512
@@ -50,5 +54,12 @@ rag_top_k: 2  # 2 chunks × 512 chars = ~1024 chars context; less memory pressur
 
 # Response chunking
 response_max_chunk_size: 200
-response_chunk_delay: 30  # for DMs: max seconds to wait for each chunk's ACK before moving on. For channel broadcasts: fixed delay between chunks.
+response_ack_timeout: 30  # DMs: max seconds to wait for each part's ACK before sending the next
+response_chunk_delay: 10  # seconds between parts when there is no ACK (channel broadcasts, rooms)
 response_max_chunks: 5    # cap reply at 5 packets so airtime budget isn't blown on one reply
+response_cite_sources: false  # true = append "[file.pdf p.N]" to replies
+
+# Abuse / overload limits
+limits_max_queue: 5          # questions held at once before senders get a "busy" reply
+limits_sender_cooldown: 30   # min seconds between accepted questions from one sender
+limits_queue_notice: true    # tell senders how many questions are ahead of theirs

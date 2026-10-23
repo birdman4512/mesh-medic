@@ -88,3 +88,49 @@ def test_response_config_defaults_max_chunks_when_missing(tmp_path):
 def test_missing_config_file_raises():
     with pytest.raises(FileNotFoundError):
         load_config("/nonexistent/config.yaml")
+
+
+def test_new_settings_have_defaults(config_file):
+    cfg = load_config(config_file)
+    assert cfg.radio.type == "meshtastic"
+    assert cfg.llm.num_ctx == 1024
+    assert cfg.rag.embedding_model == "all-minilm"
+    assert cfg.response.ack_timeout == pytest.approx(30.0)
+    assert cfg.response.cite_sources is False
+    assert cfg.limits.max_queue == 5
+    assert cfg.meshcore.room_trigger == "?"
+
+
+@pytest.mark.parametrize(
+    "old,new,message",
+    [
+        ("chunk_overlap: 64", "chunk_overlap: 512", "chunk_overlap"),
+        ("top_k: 3", "top_k: 0", "top_k"),
+        ("max_chunk_size: 200", "max_chunk_size: 10", "max_chunk_size"),
+        ("max_tokens: 400", "max_tokens: 4000", "num_ctx"),
+    ],
+)
+def test_invalid_values_rejected(tmp_path, old, new, message):
+    path = tmp_path / "config.yaml"
+    path.write_text(MINIMAL_CONFIG.replace(old, new))
+    with pytest.raises(ValueError, match=message):
+        load_config(str(path))
+
+
+def test_unknown_radio_type_rejected(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("radio:\n  type: lorawan\n" + MINIMAL_CONFIG)
+    with pytest.raises(ValueError, match="radio.type"):
+        load_config(str(path))
+
+
+def test_typo_in_key_rejected(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(MINIMAL_CONFIG.replace("top_k: 3", "topk: 3"))
+    with pytest.raises(ValueError, match="rag"):
+        load_config(str(path))
+
+
+def test_repo_config_is_valid():
+    cfg = load_config("config.yaml")
+    assert cfg.limits.sender_cooldown == 30

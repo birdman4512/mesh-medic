@@ -54,7 +54,6 @@
     - "{{ mesh_medic_data_dir }}"
     - "{{ mesh_medic_data_dir }}/pdfs"
     - "{{ mesh_medic_data_dir }}/vectordb"
-    - "{{ mesh_medic_data_dir }}/models"
 
 - name: Set ownership of install directory to mesh-medic user
   ansible.builtin.file:
@@ -62,18 +61,6 @@
     owner: "{{ mesh_medic_user }}"
     group: "{{ mesh_medic_user }}"
     recurse: true
-
-- name: Install CPU-only PyTorch (avoids pulling large CUDA build on x86_64)
-  ansible.builtin.pip:
-    name: torch
-    extra_args: "--index-url https://download.pytorch.org/whl/cpu"
-    virtualenv: "{{ mesh_medic_install_dir }}/venv"
-    virtualenv_command: python3 -m venv
-  become: true
-  become_user: "{{ mesh_medic_user }}"
-  environment:
-    TMPDIR: /var/tmp
-  when: ansible_architecture == "x86_64"
 
 - name: Create Python virtualenv and install dependencies
   ansible.builtin.pip:
@@ -86,15 +73,20 @@
     TMPDIR: /var/tmp  # /tmp is a small tmpfs; /var/tmp is on the root fs
   notify: Restart mesh-medic service
 
-- name: Pre-download sentence-transformers embedding model
-  ansible.builtin.command: >
-    {{ mesh_medic_install_dir }}/venv/bin/python -c
-    "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+- name: Remove legacy embedding packages (now served by Ollama; frees ~1-2 GB)
+  ansible.builtin.pip:
+    name:
+      - sentence-transformers
+      - torch
+    state: absent
+    virtualenv: "{{ mesh_medic_install_dir }}/venv"
   become: true
   become_user: "{{ mesh_medic_user }}"
-  environment:
-    HF_HOME: "{{ mesh_medic_data_dir }}/models"
-  changed_when: false
+
+- name: Remove legacy Hugging Face model cache
+  ansible.builtin.file:
+    path: "{{ mesh_medic_data_dir }}/models"
+    state: absent
 
 - name: Deploy config file
   ansible.builtin.template:
